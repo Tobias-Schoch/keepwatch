@@ -30,11 +30,12 @@ git clone https://github.com/Tobias-Schoch/keepwatch && cd keepwatch
   publishes (Docker bypasses `ufw`). Admin UIs listen on `127.0.0.1` only and are reached through an SSH tunnel.
 - **SSH you can close.** With Tailscale, port 22 closes to the internet. If Tailscale ever breaks, it
   reopens by itself after ~15 minutes, so you can't lock yourself out.
-- **fail2ban that actually bans**, on the first failed SSH attempt, web scanners hunting for `.env` and
-  `wp-login.php`, and brute force on your apps' login pages. Bans apply *before* Docker's NAT, so they
-  cover your containers too.
+- **fail2ban that actually bans**: SSH brute force (7 failed logins in 24 h by default,
+  `KW_F2B_SSH_MAXRETRY`), web scanners hunting for `.env` and `wp-login.php`, and brute force on your
+  apps' login pages. Bans apply *before* Docker's NAT, so they cover your containers too. The IP you
+  deploy from is never banned; put other fixed home/office IPs into `KW_TRUSTED_IPS`.
 - **Backups that restore.** Daily restic backups with consistent Postgres/SQLite dumps, an optional
-  off-site copy (S3, B2, SFTP, rclone, ...), a weekly automatic test restore, and
+  off-site copy (S3, B2, SFTP, rclone, ...), a monthly automatic test restore, and
   `./keepwatch deploy --fresh` to rebuild the whole server on a new machine from it.
 - **A reverse proxy with HTTPS** (Nginx Proxy Manager) with rate limiting and a "new site" wizard in the dashboard.
 - **A dashboard**: health, attacks and bans by country, open ports, containers with live logs (kept 14
@@ -113,6 +114,7 @@ opens the tunnel for you.
 Everything lives in `keepwatch.conf` (created by `setup`, git-ignored, every setting explained inline;
 see [`keepwatch.conf.example`](keepwatch.conf.example)). No secrets go in there: backup credentials,
 tokens and passkeys stay on the server under `/etc/keepwatch/` and travel with your backups.
+More than one server: one file each, e.g. `KW_CONF_FILE=shop.conf ./keepwatch deploy`.
 
 Settings you can change in the dashboard (update time, fail2ban limits, backup schedule and retention,
 SSH from the internet) are initial values: deploy writes them once and never reverts your changes.
@@ -141,15 +143,17 @@ handled for you:
 - **Never purge all `rc` packages.** The post-remove script of Ubuntu's `docker.io` package deletes
   `/var/lib/docker`, which means every image, container and volume. Cleanup here only touches old kernels.
 - **A backup you haven't restored is a hope.** The `backup` module restores into a scratch directory
-  every week and checks a sample of the off-site copy.
+  every month and checks a sample of the off-site copy.
 
 ## Requirements
 
-- **Server**: a fresh or existing Ubuntu 24.04 or 22.04 VPS (x86_64 or arm64), root or passwordless sudo,
-  your SSH key installed (`ssh-copy-id root@your-server`). ~1 GB RAM for the minimal set, 2 GB+
+- **Server**: a fresh or existing Ubuntu 24.04 or 22.04 VPS (x86_64 or arm64), root or passwordless sudo
+  (AWS, Lightsail, Oracle: the `ubuntu` user), your SSH key installed (`ssh-copy-id root@your-server`;
+  Keepwatch never logs in with a password). ~1 GB RAM for the minimal set, 2 GB+
   recommended with Docker, the proxy and image scanning.
-- **Your computer**: macOS or Linux (Windows: WSL) with `ssh`, `rsync`, Python 3.8+. Node.js 18+ only
-  if you build the dashboard from source (release archives include it). `restic` + `jq` for `backup pull`.
+- **Your computer**: macOS or Linux (Windows: WSL) with `ssh`, `rsync`, Python 3.8+. Node.js 18+ to
+  build the dashboard UI (deploy does it on your computer; the server never needs Node.js). `restic` +
+  `jq` for `backup pull`.
 
 ## FAQ
 

@@ -26,14 +26,22 @@ DEST=${1:-}
 THOROUGH=0
 [[ ${2:-} == --thorough ]] && THOROUGH=1
 : "${KW_HOST:?KW_HOST missing - run through ./keepwatch}"
-TARGET="${KW_SSH_USER:-root}@$KW_HOST"
-SOURCE=${KW_BACKUP_SOURCE:-sftp:$TARGET:/var/backups/keepwatch/restic}
+USER_=${KW_SSH_USER:-root} PORT=${KW_SSH_PORT:-22}
+HOST=${KW_HOST#[}; HOST=${HOST%]}
+TARGET="$USER_@$HOST"
+# restic wants an IPv6 address in brackets (sftp:root@[2001:db8::1]:/path).
+if [[ $HOST == *:* ]]; then SOURCE_HOST="[$HOST]"; else SOURCE_HOST=$HOST; fi
+SOURCE=${KW_BACKUP_SOURCE:-sftp:$USER_@$SOURCE_HOST:/var/backups/keepwatch/restic}
 ENTRY=${KW_BACKUP_KEYCHAIN:-Keepwatch backup}
 APP=${KW_APP:-0}
-# restic's sftp backend runs plain ssh: pass the port through.
-[[ ${KW_SSH_PORT:-22} == 22 ]] || export RESTIC_SFTP_ARGS="-o Port=$KW_SSH_PORT"
-SFTP_OPT=()
-[[ -n ${RESTIC_SFTP_ARGS:-} ]] && SFTP_OPT=(-o "sftp.args=$RESTIC_SFTP_ARGS")
+# restic's sftp backend runs plain ssh. The repository belongs to root (mode 700): a sudo
+# user reads it through an sftp server started with sudo; root only needs the port.
+SFTP_OPT=()  # expanded as ${SFTP_OPT[@]+...}: an empty "${SFTP_OPT[@]}" is an error under set -u in bash 3.2
+if [[ $USER_ != root ]]; then
+  SFTP_OPT=(-o "sftp.command=ssh -p $PORT $TARGET sudo -n /usr/lib/openssh/sftp-server")
+elif [[ $PORT != 22 ]]; then
+  SFTP_OPT=(-o "sftp.args=-o Port=$PORT")
+fi
 
 step() { if [[ $APP == 1 ]]; then printf '\n== %s\n' "$*"; else printf '\n\033[1m== %s\033[0m\n' "$*"; fi; }
 die() { echo "error: $*" >&2; exit 1; }
@@ -65,7 +73,13 @@ export RESTIC_PASSWORD=$PW RESTIC_FROM_PASSWORD=$PW
 unset PW RESTIC_PASSWORD_FILE
 
 mkdir -p "$DEST"
-DEST=$(cd "$DEST" && pwd)
+DEST=$(cd "$DEST" && pwd -P)
+# Never inside the Keepwatch folder: deploy copies that folder to the server, backup and all.
+REPO=$(cd "$(dirname "$0")/.." && pwd -P)
+if [[ -f $REPO/keepwatch.conf.example && ( $DEST == "$REPO" || $DEST == "$REPO"/* ) ]]; then
+  rmdir "$DEST" 2>/dev/null || true
+  die "$DEST is inside the Keepwatch folder - deploy would copy the backup to the server. Pick a folder outside $REPO."
+fi
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
 
@@ -74,7 +88,7 @@ if [[ ! -f $DEST/config ]]; then
   step "Create a new copy in $DEST"
   mark "step init"
   # Same chunker parameters as the server, otherwise copy cannot deduplicate.
-  restic -r "$DEST" "${SFTP_OPT[@]}" init --from-repo "$SOURCE" --copy-chunker-params >"$LOG" 2>&1 \
+  restic -r "$DEST" ${SFTP_OPT[@]+"${SFTP_OPT[@]}"} init --from-repo "$SOURCE" --copy-chunker-params >"$LOG" 2>&1 \
     || { tail -3 "$LOG" >&2; why "$LOG"; die "Could not create the copy."; }
   echo "  created"
 fi
@@ -83,7 +97,7 @@ fi
 # password work and how many snapshots are new. Also used for the final comparison.
 step "Read snapshots on the server"
 mark "step connect"
-SERVER=$(restic -r "$SOURCE" "${SFTP_OPT[@]}" snapshots --json --no-lock 2>"$LOG") \
+SERVER=$(restic -r "$SOURCE" ${SFTP_OPT[@]+"${SFTP_OPT[@]}"} snapshots --json --no-lock 2>"$LOG") \
   || { tail -3 "$LOG" >&2; why "$LOG"; die "Could not read the snapshots on the server."; }
 HERE=$(restic -r "$DEST" snapshots --json --no-lock)
 before=$(jq length <<<"$HERE")
@@ -97,11 +111,11 @@ if [[ $APP == 1 ]]; then
   # Progress (packs) without a terminal, for the app. restic reports "snapshot ... of ..."
   # when each snapshot starts, "... saved" only collected at the end.
   export RESTIC_PROGRESS_FPS=${RESTIC_PROGRESS_FPS:-1}
-  restic -r "$DEST" "${SFTP_OPT[@]}" copy --from-repo "$SOURCE" 2>&1 | tee "$LOG" | tr -u '\r' '\n' \
+  restic -r "$DEST" ${SFTP_OPT[@]+"${SFTP_OPT[@]}"} copy --from-repo "$SOURCE" 2>&1 | tee "$LOG" | tr -u '\r' '\n' \
     | sed -l -nE 's/^snapshot ([0-9a-f]+) of .*/::snapshot start \1/p; s/^snapshot ([0-9a-f]+) saved.*/::snapshot saved \1/p; s/^.*[[:space:]]([0-9.]+)%[[:space:]]+([0-9]+) \/ ([0-9]+) packs copied.*/::snapshot packs \1 \2 \3/p' \
     && ok=1 || ok=0
 else
-  restic -r "$DEST" "${SFTP_OPT[@]}" copy --from-repo "$SOURCE" >"$LOG" 2>&1 && ok=1 || ok=0
+  restic -r "$DEST" ${SFTP_OPT[@]+"${SFTP_OPT[@]}"} copy --from-repo "$SOURCE" >"$LOG" 2>&1 && ok=1 || ok=0
 fi
 if (( ! ok )); then
   tail -3 "$LOG" >&2

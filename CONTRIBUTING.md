@@ -49,3 +49,8 @@ Test on a throwaway VPS (or a local VM with Ubuntu 24.04) before opening a pull 
 
 English everywhere. Comments explain *why* (the trap, the incident, the trade-off), not what the next
 line does. Keep dependencies at zero on the server: bash, coreutils, Python standard library.
+
+What runs on your computer (`keepwatch`, `lib/deploy.sh`, `check.sh`, `tunnel.sh`, `backup-pull.sh`,
+`wizard.py`, `kwconf.py`) must work with macOS' bash 3.2 and BSD tools, and Python 3.8: no `declare -A`,
+`mapfile`, `${var,,}`; `"${arr[@]}"` of an empty array fails under `set -u` (use `${arr[@]+"${arr[@]}"}`).
+Test with `/bin/bash` on a Mac if you can.

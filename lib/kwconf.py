@@ -108,6 +108,7 @@ def save(values: dict, path: Path = CONF) -> None:
     An existing file keeps its layout and only changes the given keys; a new
     file starts from the example, so the documentation travels with it.
     """
+    path = path.resolve()  # a symlink (dotfiles repo) stays a symlink; its target gets the change
     base = path if path.is_file() else EXAMPLE
     lines, seen = base.read_text().splitlines(), set()
     for i, line in enumerate(lines):
@@ -126,6 +127,8 @@ def save(values: dict, path: Path = CONF) -> None:
         lines += ["", "# --- added by keepwatch ---"] + [f"{k}={_quote(values[k])}" for k in extra]
     tmp = path.with_suffix(".tmp")
     tmp.write_text("\n".join(lines) + "\n")
+    if path.is_file():
+        os.chmod(tmp, path.stat().st_mode & 0o7777)
     os.replace(tmp, path)
 
 
@@ -166,7 +169,7 @@ def _cli(argv: list) -> int:
         return 2
     cmd, args = argv[0], argv[1:]
     mods = modules()
-    if cmd == "get":
+    if cmd == "get" and args:
         print(load().get(args[0], ""))
         return 0
     if cmd == "desktop-json":
@@ -176,13 +179,28 @@ def _cli(argv: list) -> int:
         print("No keepwatch.conf yet - run ./keepwatch setup first.", file=sys.stderr)
         return 1
     on = active()
+    g, r, d, x = ("\033[32m", "\033[31m", "\033[2m", "\033[0m") if sys.stdout.isatty() else ("",) * 4
     if cmd == "modules":
         width = max(len(m) for m in mods)
         for m, info in mods.items():
-            mark = "\033[32m on\033[0m" if m in on else "\033[2moff\033[0m"
-            need = f"  \033[2m(needs {', '.join(info['requires'])})\033[0m" if info["requires"] else ""
+            mark = f"{g} on{x}" if m in on else f"{d}off{x}"
+            need = f"  {d}(needs {', '.join(info['requires'])}){x}" if info["requires"] else ""
             print(f"  {mark}  {m:<{width}}  {info['summary']}{need}")
         print("\n  ./keepwatch enable <module> / disable <module>, then ./keepwatch deploy")
+        return 0
+    if cmd == "validate":
+        # Before deploy connects: a hand-edited KW_MODULES with an unknown
+        # module or a missing requirement is refused here, not on the server.
+        for m in sorted(on):
+            if m not in mods:
+                print(f"Unknown module in KW_MODULES: {m} (see ./keepwatch modules)", file=sys.stderr)
+                return 1
+        for m in ordered(on, mods):
+            for need in mods[m]["requires"]:
+                if need not in on:
+                    print(f"Module {m} needs {need}: ./keepwatch enable {need}  (or ./keepwatch disable {m})",
+                          file=sys.stderr)
+                    return 1
         return 0
     if cmd in ("enable", "disable"):
         if not args:
@@ -205,9 +223,9 @@ def _cli(argv: list) -> int:
             return 0
         save({"KW_MODULES": " ".join(ordered(new, mods))})
         for m in ordered(added, mods):
-            print(f"  \033[32m+ {m}\033[0m{'' if m in args else '  (needed)'}")
+            print(f"  {g}+ {m}{x}{'' if m in args else '  (needed)'}")
         for m in ordered(removed, mods):
-            print(f"  \033[31m- {m}\033[0m{'' if m in args else '  (needs a disabled module)'}")
+            print(f"  {r}- {m}{x}{'' if m in args else '  (needs a disabled module)'}")
         print("\n  Apply with: ./keepwatch deploy")
         return 0
     print(__doc__)

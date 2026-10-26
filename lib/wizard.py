@@ -13,6 +13,7 @@ import argparse
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -141,8 +142,19 @@ def note(text: str, color: str = D) -> None:
 def host_ok(v: str):
     if not v:
         return "Needed: the address deploy connects to."
-    if not re.match(r"^[A-Za-z0-9.:\-\[\]]+$", v):
+    if not re.match(r"^\[?[A-Za-z0-9.:\-]+\]?$", v) or v.startswith("-"):
         return "That does not look like an IP or hostname."
+    return None
+
+
+def user_ok(v: str):
+    return None if re.match(r"^[a-z_][a-z0-9_.-]*$", v) else "A Linux user name, e.g. root or ubuntu"
+
+
+def tz_ok(v: str):
+    # Checked against this computer's zone list where there is one (the server would fall back to UTC).
+    if os.path.isdir("/usr/share/zoneinfo") and not os.path.isfile(os.path.join("/usr/share/zoneinfo", v)):
+        return "Unknown timezone - e.g. Europe/Berlin, America/New_York, Etc/UTC"
     return None
 
 
@@ -166,19 +178,32 @@ def local_tz() -> str:
 
 # --- Probe ----------------------------------------------------------------------------
 
-def probe(host: str, user: str, port: str) -> dict | None:
-    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=accept-new",
-           "-p", port, f"{user}@{host}", "sh -s"]
+def probe(host: str, user: str, port: str, batch: bool) -> dict | None:
+    # Keys only, as deploy. Not BatchMode when someone is at the keyboard: a key with a
+    # passphrase that is not in the agent then asks for it (on the terminal, not stdin)
+    # instead of failing - and on a server with fail2ban, that failure would ban you.
+    cmd = ["ssh", "-o", "PreferredAuthentications=publickey", "-o", "ConnectTimeout=10",
+           "-o", "StrictHostKeyChecking=accept-new", "-p", port, f"{user}@{host}", "sh -s"]
+    if batch:
+        cmd[1:1] = ["-o", "BatchMode=yes"]
     try:
-        r = subprocess.run(cmd, input=PROBE, capture_output=True, text=True, timeout=40)
+        r = subprocess.run(cmd, input=PROBE, capture_output=True, text=True, timeout=40 if batch else 180)
     except (OSError, subprocess.TimeoutExpired) as e:
         note(f"Could not run ssh: {e}", Y)
         return None
     if r.returncode != 0 and "os=" not in r.stdout:
-        err = (r.stderr.strip().splitlines() or ["no output"])[-1]
+        # AWS, Lightsail, Oracle, GCP: root's key only prints "Please login as the user ubuntu".
+        other = re.search(r'login as the user "?([a-z_][a-z0-9_-]*)"?', r.stdout + r.stderr)
+        if other:
+            return {"login_as": other.group(1)}
+        err = (r.stderr.strip().splitlines() or r.stdout.strip().splitlines() or ["no output"])[-1]
         note(f"SSH failed: {err}", Y)
         if "Permission denied" in r.stderr:
-            note("Keepwatch logs in with an SSH key. Copy yours first:  ssh-copy-id " + shlex.quote(f"{user}@{host}"), Y)
+            dest = shlex.quote(f"{user}@{host}")
+            note(f"Keepwatch logs in with an SSH key. Copy yours first:  ssh-copy-id {'' if port == '22' else '-p ' + port + ' '}{dest}", Y)
+        elif "IDENTIFICATION HAS CHANGED" in r.stderr or "Host key verification failed" in r.stderr:
+            known = host if port == "22" else f"[{host}]:{port}"
+            note(f"The server has a new host key (reinstalled?). If that is expected:  ssh-keygen -R {shlex.quote(known)}", Y)
         return None
     out = {}
     for line in r.stdout.splitlines():
@@ -238,13 +263,25 @@ def run(args) -> int:
     # 1. Server
     section("1. Your server")
     host = args.host or ask.text("IP address or hostname", old.get("KW_HOST", ""), host_ok)
-    user = args.user or ask.text("SSH user (root, or a user with passwordless sudo)", conf.get("KW_SSH_USER", "root"))
-    port = ask.text("SSH port", conf.get("KW_SSH_PORT", "22"), lambda v: None if v.isdigit() else "A number, please")
+    # ssh wants an IPv6 address without brackets (deploy adds them where rsync needs them).
+    host = host.strip("[]")
+    user = args.user or ask.text("SSH user (root, or a user with passwordless sudo)", conf.get("KW_SSH_USER", "root"), user_ok)
+    port = ask.text("SSH port", conf.get("KW_SSH_PORT", "22"),
+                    lambda v: None if v.isdigit() and 0 < int(v) < 65536 else "A port number, please")
 
     p, issues = None, []
     if not args.no_probe and (args.yes or ask.yesno("Look at the server now to tailor the setup? (read-only, over SSH)")):
         print(f"    {D}connecting to {user}@{host} ...{X}")
-        p = probe(host, user, port)
+        p = probe(host, user, port, args.yes)
+        if p and "login_as" in p:
+            other = p["login_as"]
+            note(f"This server does not let {user} log in - it asks for the user {other}.", Y)
+            p = None
+            if not args.user and ask.yesno(f"Use {other} (with passwordless sudo, as these images come)?", True):
+                user = other
+                print(f"    {D}connecting to {user}@{host} ...{X}")
+                p = probe(host, user, port, args.yes)
+                p = None if p and "login_as" in p else p
         if p:
             issues = show_probe(p)
     kinds = {k for k, _ in issues}
@@ -253,35 +290,47 @@ def run(args) -> int:
     # 2. Purpose
     section("2. What is this server for?")
     keys = list(PRESETS)
+    current = kwconf.active(conf) if old.get("KW_MODULES") else None
+    kept = False
     if args.preset:
-        preset = args.preset
+        chosen = set(PRESETS[args.preset][1].split())
     else:
         default = 0
         if p and p.get("docker") != "yes":
             default = 2
         elif p and "web" in kinds:
             default = 1
-        preset = keys[ask.choose("Pick the closest one - you can fine-tune every module afterwards.",
-                                 [(PRESETS[k][0], "") for k in keys], default)]
-    chosen = set(PRESETS[preset][1].split())
+        options = [(PRESETS[k][0], "") for k in keys]
+        # Running setup again must not swap your modules for a preset just because you pressed Enter.
+        if current:
+            options.insert(0, (f"Keep the current selection ({len(current)} modules)", ""))
+            default = 0
+        i = ask.choose("Pick the closest one - you can fine-tune every module afterwards.", options, default)
+        if current and i == 0:
+            chosen, kept = set(current), True
+        else:
+            chosen = set(PRESETS[keys[i - 1 if current else i]][1].split())
 
     # 3. Access
     section("3. How do you want to reach the server?")
     access = ask.choose("Admin UIs (dashboard, proxy, Portainer) are never public - you reach them through an SSH tunnel.", [
         ("Tailscale + SSH key", "Port 22 closes to the internet once Tailscale is up. If Tailscale ever breaks, "
                                 "port 22 reopens by itself after ~15 minutes, so you can't lock yourself out."),
-        ("SSH key only", "Port 22 stays open; fail2ban bans an IP on its first failed login."),
+        ("SSH key only", "Port 22 stays open; fail2ban bans an IP after 7 failed logins in 24 hours."),
     ], 0 if not old or "tailscale" in kwconf.active(conf) else 1)
-    ssh_public = "yes"
+    # Your earlier choice stays unless you change it (the dashboard switches it at runtime anyway).
+    ssh_public = conf.get("KW_SSH_PUBLIC", "yes") if old else "yes"
     if access == 0:
         chosen.add("tailscale")
         if p and p.get("tailscale_up") == "yes":
-            ssh_public = "no" if ask.yesno("Tailscale is already connected. Close port 22 to the internet right away?") else "yes"
-        else:
+            ssh_public = "no" if ask.yesno("Tailscale is already connected. Close port 22 to the internet right away?",
+                                           ssh_public == "no") else "yes"
+        elif ssh_public == "yes":
             note("Port 22 stays open for the first deploy; deploy shows a Tailscale login link. "
                  "Close it afterwards in the dashboard or with KW_SSH_PUBLIC=\"no\".")
     else:
         chosen.discard("tailscale")
+        ssh_public = "yes"
 
     # 4. Backups
     section("4. Backups")
@@ -290,7 +339,7 @@ def run(args) -> int:
         ("Local and off-site", "A copy on the server for quick restores, plus one somewhere else that survives losing the server."),
         ("Local only", "Protects against mistakes, not against losing the server. You can pull copies with ./keepwatch backup pull."),
         ("No backups", ""),
-    ], 0 if remote or not old else (1 if "backup" in kwconf.active(conf) else 2))
+    ], 0 if remote or (not old and not ask.yes) else (1 if not old or "backup" in kwconf.active(conf) else 2))
     if b == 2:
         chosen.discard("backup")
         remote = ""
@@ -312,12 +361,18 @@ def run(args) -> int:
     # 5. Tools
     section("5. Tools")
     if "docker" in chosen:
-        had = "portainer" in kwconf.active(conf) if old else True
-        if ask.yesno("Portainer - web UI for Docker stacks, deploys from Git? (needs ~100 MB RAM)", had and not low_mem):
+        had = "portainer" in kwconf.active(conf) if old else not low_mem
+        if ask.yesno("Portainer - web UI for Docker stacks, deploys from Git? (needs ~100 MB RAM)", had):
             chosen.add("portainer")
-        if low_mem and "image-scan" in chosen:
+        else:
+            chosen.discard("portainer")
+        # Small server: a preset leaves the scanner out; a selection you keep stays as it is.
+        if low_mem and not kept:
             chosen.discard("image-scan")
-    if not ask.yesno("Keepwatch dashboard - health, security, backups, updates and sites on one page?", True):
+    if ask.yesno("Keepwatch dashboard - health, security, backups, updates and sites on one page?",
+                 "dashboard" in kwconf.active(conf) if old else True):
+        chosen.add("dashboard")
+    else:
         chosen.discard("dashboard")
     if "web" in kinds and "proxy" in chosen:
         if not ask.yesno("Something else holds ports 80/443. Install the reverse proxy anyway?", False):
@@ -325,7 +380,7 @@ def run(args) -> int:
 
     # 6. Schedule
     section("6. Schedule")
-    tz = ask.text("Your timezone (for schedules and the dashboard)", conf.get("KW_LOCAL_TZ") if old else local_tz())
+    tz = ask.text("Your timezone (for schedules and the dashboard)", conf.get("KW_LOCAL_TZ") if old else local_tz(), tz_ok)
     upd = ask.text("Install security updates at", conf.get("KW_UPDATE_TIME", "04:00"), hhmm_ok) if "auto-updates" in chosen else conf.get("KW_UPDATE_TIME")
     reboot = conf.get("KW_AUTO_REBOOT", "yes")
     if "auto-updates" in chosen:
@@ -336,6 +391,8 @@ def run(args) -> int:
     section("7. Trusted addresses")
     trusted = conf.get("KW_TRUSTED_IPS", "")
     me = (p or {}).get("client_ip", "")
+    note("fail2ban bans an address after 7 failed SSH logins in 24 hours - your own too. The IP you deploy")
+    note("from is never banned; add other fixed IPs here (the provider's web console always works).")
     if me and me not in trusted.split() and not me.startswith("100."):
         note(f"The server sees you as {me}.")
         if ask.yesno(f"Never ban {me}? (fine for a fixed home/office IP; skip it for mobile or changing IPs)", False):
@@ -355,6 +412,10 @@ def run(args) -> int:
         values["KW_HOSTNAME"] = conf.get("KW_HOSTNAME", "keep")
         # Without the proxy nothing needs 80/443; with an existing config the user's list wins.
         values["KW_PUBLIC_TCP"] = conf.get("KW_PUBLIC_TCP", "80 443") if "proxy" in final else ""
+    elif "proxy" in final and "proxy" not in kwconf.active(conf):
+        # A proxy switched on later needs 80/443, which an earlier setup may have left closed.
+        tcp = conf.get("KW_PUBLIC_TCP", "").split()
+        values["KW_PUBLIC_TCP"] = " ".join(tcp + [x for x in ("80", "443") if x not in tcp])
 
     section("Summary")
     for k in ("KW_HOST", "KW_SSH_USER", "KW_LOCAL_TZ", "KW_BACKUP_REMOTE", "KW_SSH_PUBLIC", "KW_TRUSTED_IPS"):
@@ -369,6 +430,10 @@ def run(args) -> int:
     section("Next")
     if p and p.get("priv") == "none":
         note("First give your SSH user passwordless sudo or use root.", Y)
+    web = Path(kwconf.ROOT, "dashboard", "web")
+    if "dashboard" in final and not (web / "dist" / "index.html").is_file() and not shutil.which("npm"):
+        note("The dashboard UI is built on this computer during deploy: install Node.js 18+ first", Y)
+        note("(only here - the server never needs it).", Y)
     print(f"    ./keepwatch deploy            {D}set up the server (takes a few minutes the first time){X}")
     if "dashboard" in final:
         print(f"    ./keepwatch tunnel            {D}open the dashboard and the admin UIs on your computer{X}")

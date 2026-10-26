@@ -1,9 +1,12 @@
 #!/bin/bash
 # Keepwatch - a hardened server and a dashboard to keep watch over it.
 # Runs on your computer (macOS or Linux); the server only ever receives files and commands over SSH.
+# Written for bash 3.2 (macOS' /bin/bash): no associative arrays, no ${var,,}, no mapfile.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd)
 LIB=$ROOT/lib
+# One configuration per server: KW_CONF_FILE=other.conf ./keepwatch deploy (same as lib/kwconf.py).
+CONF_FILE=${KW_CONF_FILE:-$ROOT/keepwatch.conf}
 
 usage() {
   cat <<'EOF'
@@ -27,39 +30,68 @@ Usage: ./keepwatch <command>
   desktop [--build-only]     build and install the macOS app, write its config
 
 Configuration: keepwatch.conf (every setting is explained in there).
+Another server: KW_CONF_FILE=/path/to/other.conf ./keepwatch <command>
 EOF
 }
 
+need_cmd() {  # need_cmd CMD "how to get it"
+  command -v "$1" >/dev/null || { echo "$1 is missing on this computer - $2" >&2; exit 1; }
+}
+
 need_conf() {
-  [[ -f $ROOT/keepwatch.conf ]] || { echo "No keepwatch.conf yet - run ./keepwatch setup first." >&2; exit 1; }
+  need_cmd ssh "install the OpenSSH client."
+  [[ -f $CONF_FILE ]] || { echo "No ${CONF_FILE##*/} yet - run ./keepwatch setup first." >&2; exit 1; }
   set -a
   # shellcheck disable=SC1091
   source "$ROOT/keepwatch.conf.example"
-  # shellcheck disable=SC1091
-  source "$ROOT/keepwatch.conf"
+  # shellcheck disable=SC1090
+  source "$CONF_FILE"
   set +a
-  TARGET="$KW_SSH_USER@$KW_HOST"
+  # An IPv6 address may be written as [2001:db8::1]; ssh wants it without brackets.
+  HOST=${KW_HOST#[}; HOST=${HOST%]}
+  [[ -n $HOST ]] || { echo "KW_HOST is empty in $CONF_FILE." >&2; exit 1; }
+  KW_SSH_PORT=${KW_SSH_PORT:-22} KW_SSH_USER=${KW_SSH_USER:-root}
+  TARGET="$KW_SSH_USER@$HOST"
   # SetEnv: macOS sends LC_CTYPE=UTF-8, which Linux does not know (perl/apt warn on every call).
-  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o SetEnv=LC_ALL=C.UTF-8 -p "$KW_SSH_PORT")
+  # Keys only: a deploy that got in with a password would switch passwords off (ssh-hardening)
+  #   and lock that way out - a key that works for deploy keeps working afterwards.
+  # ServerAlive: apt and image pulls run for minutes without output; routers drop idle connections.
+  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o SetEnv=LC_ALL=C.UTF-8 -o PreferredAuthentications=publickey
+            -o ServerAliveInterval=30 -p "$KW_SSH_PORT")
   if [[ $KW_SSH_USER == root ]]; then SUDO=""; else SUDO="sudo -n"; fi
+}
+
+# One SSH connection for the whole command (deploy needs ~8): one passphrase prompt, one login
+# in the server's log, and deploy --fresh keeps its connection when the restore brings the old
+# host keys back. /tmp, not $TMPDIR: socket paths are limited to ~100 bytes and macOS' $TMPDIR
+# is long. $TMP also holds the command's temporary files; all of it goes at exit.
+mux_on() {
+  TMP=$(mktemp -d /tmp/keepwatch.XXXXXX)
+  SSH_OPTS+=(-o ControlMaster=auto -o "ControlPath=$TMP/%C" -o ControlPersist=60)
+  trap 'ssh "${SSH_OPTS[@]}" -O exit "$TARGET" >/dev/null 2>&1 || true; rm -rf "$TMP"' EXIT
 }
 
 # shellcheck disable=SC2029 # the command is meant to run on the server
 remote() { ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
-remote_tty() { ssh -t "${SSH_OPTS[@]}" "$TARGET" "$@"; }
+# LogLevel=ERROR: no "Shared connection to ... closed." after every step; errors still show.
+remote_tty() { ssh -t -o LogLevel=ERROR "${SSH_OPTS[@]}" "$TARGET" "$@"; }
 on() { [[ " $KW_MODULES " == *" $1 "* ]]; }
 
 cmd=${1:-}
 [[ $# -gt 0 ]] && shift
 case $cmd in
   setup)
+    need_cmd python3 "install Python 3.8 or newer."
     exec python3 "$LIB/wizard.py" "$@" ;;
-  modules)
-    exec python3 "$LIB/kwconf.py" modules ;;
-  enable|disable)
+  modules|enable|disable)
+    need_cmd python3 "install Python 3.8 or newer."
     exec python3 "$LIB/kwconf.py" "$cmd" "$@" ;;
   deploy)
     need_conf
+    need_cmd rsync "install rsync (macOS has it; Debian/Ubuntu: apt install rsync)."
+    need_cmd python3 "install Python 3.8 or newer."
+    python3 "$LIB/kwconf.py" validate || exit 1
+    mux_on
     # shellcheck source=lib/deploy.sh
     source "$LIB/deploy.sh" ;;
   tunnel)
@@ -68,6 +100,8 @@ case $cmd in
     source "$LIB/tunnel.sh" ;;
   check)
     need_conf
+    need_cmd python3 "install Python 3.8 or newer."
+    mux_on
     # shellcheck source=lib/check.sh
     source "$LIB/check.sh" ;;
   ssh)
@@ -82,6 +116,16 @@ case $cmd in
     esac ;;
   restore)
     need_conf
+    # The options end up in a command line on the server.
+    [[ "$*" =~ ^[A-Za-z0-9\ ._-]*$ ]] || { echo "usage: ./keepwatch restore [--test] [--snapshot <id>] [--stacks-only] [--force]" >&2; exit 2; }
+    # A real restore overwrites newer data with the snapshot's: never by accident.
+    if [[ " $* " != *" --test "* && " $* " != *" --stacks-only "* ]]; then
+      echo "  This puts the backup back onto $HOST: settings, /root, /opt, /srv, Docker volumes and"
+      echo "  databases are overwritten with the snapshot's version. Meant for a new or broken server."
+      echo "  To check the backup without changing anything: ./keepwatch restore --test"
+      read -rp "  Restore onto $HOST now? [y/N] " a || a=""
+      [[ $a == [yY]* ]] || { echo "  Nothing changed."; exit 1; }
+    fi
     remote_tty "$SUDO bash /opt/keepwatch/modules/backup/restore.sh $*" ;;
   desktop)
     [[ $(uname) == Darwin ]] || { echo "The desktop app is macOS only. Elsewhere: ./keepwatch tunnel" >&2; exit 1; }
