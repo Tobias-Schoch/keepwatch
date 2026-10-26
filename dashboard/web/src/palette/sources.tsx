@@ -5,7 +5,7 @@ import { dockViews } from "../nav";
 import { HEALTH_LABEL, STATE_LABEL, stateTone } from "../pages/Containers";
 import { siteHost } from "../pages/Sites";
 import { Redeploy, repoName } from "../pages/Stacks";
-import { setServiceOpen } from "../pages/servicesStore";
+import { setServiceOpen, showSite } from "../pages/servicesStore";
 import type { Stack } from "../types";
 import { registerPalette, stackContainers, type PaletteCtx } from "./registry";
 import { BackupConfirm, UnbanConfirm } from "./dialogs";
@@ -137,7 +137,10 @@ registerPalette((d) => {
       keywords: `${site.domains.slice(1).join(" ")} ${host}`,
       icon: Globe,
       mono: true,
-      run: (ctx: PaletteCtx) => ctx.jump("services", { sel: ".d-block a", text: site.domains[0], up: ".svc-row, .svc-site" }),
+      run: (ctx: PaletteCtx) => {
+        showSite(site.domains[0]); // the page expands the service holding the site, then the jump finds its link
+        ctx.jump("services", { sel: ".d-block a", text: site.domains[0], up: ".svc-row, .svc-site" });
+      },
     });
   }
   for (const c of containers)

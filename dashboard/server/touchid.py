@@ -9,7 +9,7 @@ Two kinds of devices, verified the same way (WebAuthn assertion, ES256):
 
   passkey  WebAuthn in the browser with a platform authenticator or security key.
   app      the macOS app: key in the Secure Enclave, signs only after Touch ID
-           (bridge window.webkit.messageHandlers.serverTouchID).
+           (bridge window.webkit.messageHandlers.keepwatchTouchID, older apps: serverTouchID).
 
 Flow of a dangerous request:
   1. Request without header X-Touch-ID  -> 428 { error, touchid: { challenge, rpId, allow, action, timeout } }
@@ -19,12 +19,17 @@ Flow of a dangerous request:
   3. The backend checks challenge, origin, RP ID, "user verified" and the signature.
 
 As long as no device is registered, none of this applies - everything works without it.
-Registering the first device needs no confirmation; exactly one device is allowed.
+Registering the first device needs no confirmation (so do it right away). Every further device
+needs either a passkey confirmation from a registered device (another key on a device that can
+already confirm here) or a pairing code (a device without a key, e.g. the macOS app or another
+browser): 6 digits, valid for 5 minutes, single use, 5 wrong attempts and it is gone, created only
+with a passkey confirmation. Removing a device needs a passkey confirmation too; the last device
+can never be removed (passkeys would be off and anyone with tunnel access could register first).
 
 Only the public key is stored: CONF_DIR/passkeys.json (600, part of the backup).
 Signatures are verified with python3-cryptography (Ubuntu package), no home-made crypto.
 
-Emergency (device lost): on the server `keepwatch-passkey reset` (over SSH).
+Emergency (all devices lost): on the server `keepwatch-passkey reset` (over SSH).
 """
 from __future__ import annotations
 
@@ -52,14 +57,15 @@ except ImportError:  # pragma: no cover
 
 STORE = Path(os.environ.get("DASHBOARD_PASSKEYS", config.CONF_DIR / "passkeys.json"))
 TTL = 120            # seconds a challenge is valid
+PAIR_TTL = 300       # seconds a pairing code is valid
+PAIR_TRIES = 5       # wrong attempts before the pairing code is dropped
 RP_NAME = "Keepwatch"
 FLAG_UP, FLAG_UV, FLAG_AT = 0x01, 0x04, 0x40
-ONE_DEVICE = (f"A device is already registered - exactly one is allowed. To switch: run "
-              f"\"{config.PASSKEY_CLI}\" on the server over SSH, then register the new device here.")
 NO_CRYPTO = "python3-cryptography is missing on the server - run ./keepwatch deploy."
 
 LOCK = threading.Lock()
 CHALLENGES: dict[str, dict] = {}
+PAIR: dict = {}      # the one pending pairing code: {code, exp, tries, uid} - a new code replaces the old one
 
 
 def D():
@@ -102,7 +108,9 @@ def _int(v) -> int:
 def _f2b_looser(body: dict) -> bool:
     d = D()
     cur = d.fail2ban_settings()
-    if cur["maxretry"] is not None and _int(body.get("maxretry")) > cur["maxretry"]:  # None: no Tailscale jail
+    if cur["maxretry"] is not None and body.get("maxretry") is not None and _int(body.get("maxretry")) > cur["maxretry"]:  # None: no Tailscale jail
+        return True
+    if body.get("sshMaxretry") is not None and _int(body.get("sshMaxretry")) > cur["sshMaxretry"]:
         return True
     if _int(body.get("recidiveMaxretry")) > cur["recidiveMaxretry"]:
         return True
@@ -152,8 +160,10 @@ DANGER: list[tuple[str, str, str, object, str | None]] = [
     # Retention
     ("PUT", r"/api/settings/backup", "Shorten backup retention", _backup_shorter, "backup"),
     ("PUT", r"/api/logarchive/settings", "Shorten log archive", _archive_shorter, "log-archive"),
-    # Passkeys themselves (not listed in "protects")
-    ("POST", r"/api/touchid/register/start", "Add another passkey device", None, None),
+    # Passkeys themselves (not listed in "protects"). With a pairing code, register/start needs no
+    # confirmation - the code itself was created with one (register_start checks it).
+    ("POST", r"/api/touchid/register/start", "Add another passkey device", lambda b: not b.get("pairCode"), None),
+    ("POST", r"/api/touchid/pair", "Create pairing code", None, None),
     ("DELETE", r"/api/touchid/devices/[^/]+", "Remove passkey device", None, None),
 ]
 _DANGER = [(set(m.split("|")), re.compile(p), label, cond, mod) for m, p, label, cond, mod in DANGER]
@@ -365,6 +375,7 @@ def _cose_to_spki(cose: dict) -> str:
 
 def gate(handler, method: str, path: str, body: dict):
     """Before every endpoint: dangerous and a passkey registered -> fresh, matching assertion needed."""
+    handler._touchid_ok = None  # set below only after a valid assertion for THIS request
     if not config.passkey() or not _rule(method, path):
         return  # turned off in keepwatch.conf, or not dangerous
     data = _load()
@@ -443,8 +454,10 @@ def status(handler) -> dict:
                 "here": False, "devices": [], "pairing": None, "protects": [], "ttl": TTL}
     data = _load()
     devs = [_public(d, rp) for d in data["devices"]]
+    with LOCK:
+        pairing = {"expires": PAIR["exp"]} if PAIR and PAIR["exp"] > time.time() and devs else None
     return {"enabled": True, "active": bool(devs), "crypto": ec is not None, "rpId": rp, "rpUsable": _rp_usable(rp),
-            "here": any(d["here"] for d in devs), "devices": devs, "pairing": None, "protects": protects(),
+            "here": any(d["here"] for d in devs), "devices": devs, "pairing": pairing, "protects": protects(),
             "ttl": TTL}
 
 
@@ -467,12 +480,17 @@ def register_start(handler, body: dict) -> dict:
         raise _err(409, f"Passkeys only work with a name, not with {rp or 'this address'} - "
                         "open the dashboard at http://localhost:<port> (SSH tunnel or the macOS app).")
     data = _load()
-    # Exactly one device: once one is registered, the dashboard adds no other -
-    # not even with a passkey confirmation.
-    if data["devices"]:
-        raise _err(409, ONE_DEVICE)
+    first = not data["devices"]
+    if not first:
+        # A further device: either a pairing code (single use, created with a passkey) or a passkey
+        # confirmation of a registered device, which gate() checked for this very request.
+        if body.get("pairCode"):
+            _use_pair(body["pairCode"], data)
+        elif not getattr(handler, "_touchid_ok", None):
+            raise _err(403, "Adding a device needs a passkey confirmation from a registered device or a pairing code.")
     uid = data.get("userId") or b64e(secrets.token_bytes(16))
-    ch = _new_challenge("register", rp, name=_name(body.get("name")), userId=uid)
+    # "first": registered without any confirmation - only valid while there is still no device (see finish).
+    ch = _new_challenge("register", rp, name=_name(body.get("name")), userId=uid, first=first)
     user = f"keepwatch@{config.hostname()}"
     return {"challenge": ch, "rp": {"id": rp, "name": RP_NAME},
             "user": {"id": uid, "name": user, "displayName": user},
@@ -483,8 +501,6 @@ def register_finish(handler, body: dict) -> dict:
     _require_enabled()
     if ec is None:
         raise _err(503, NO_CRYPTO)
-    if _load()["devices"]:
-        raise _err(409, ONE_DEVICE)
     rp = rp_id(handler)
     try:
         cdj = b64d(body.get("clientDataJSON"))
@@ -533,6 +549,9 @@ def register_finish(handler, body: dict) -> dict:
     now = time.time()
     with LOCK:
         data = _load()
+        if ch.get("first") and data["devices"]:
+            # Started as the first device (no confirmation), but meanwhile another one was registered.
+            raise _err(409, "Another device was registered in the meantime - adding this one needs a passkey confirmation or a pairing code now.")
         if any(d["id"] == cid for d in data["devices"]):
             raise _err(409, "This device is already registered.")
         dev = {"id": cid, "name": ch["name"], "kind": kind, "rpId": rp, "publicKey": spki, "signCount": count,
@@ -544,21 +563,53 @@ def register_finish(handler, body: dict) -> dict:
 
 
 def pair(handler) -> dict:
-    """Pairing codes are gone (exactly one device); kept as an endpoint so old clients get a clear answer."""
-    raise _err(409, "Pairing is turned off - exactly one passkey device is allowed.")
+    """New pairing code for a device without a key. gate() has required a passkey confirmation."""
+    _require_enabled()
+    data = _load()
+    if not data["devices"]:
+        raise _err(409, "No device is registered yet - the first one needs no code.")
+    if not getattr(handler, "_touchid_ok", None):
+        raise _err(403, "A pairing code needs a passkey confirmation.")
+    with LOCK:
+        PAIR.clear()
+        PAIR.update(code=f"{secrets.randbelow(10 ** 6):06d}", exp=time.time() + PAIR_TTL, tries=0,
+                    uid=data.get("userId"))
+        return {"code": PAIR["code"], "expires": PAIR["exp"]}
+
+
+def _use_pair(raw, data: dict):
+    """Consumes the pairing code or raises 403. Single use; PAIR_TRIES wrong attempts drop it, so a
+    6-digit code has a PAIR_TRIES-in-a-million chance to be guessed, and only while one is pending.
+    Bound to the device list it was created for: after keepwatch-passkey reset an old code is void."""
+    code = re.sub(r"[\s-]", "", str(raw))[:16]
+    with LOCK:
+        if not PAIR or PAIR["exp"] < time.time() or PAIR.get("uid") != data.get("userId"):
+            PAIR.clear()
+            raise _err(403, "No valid pairing code - create a new one on a registered device.")
+        if re.fullmatch(r"\d{6}", code) and hmac.compare_digest(code.encode(), PAIR["code"].encode()):
+            PAIR.clear()  # single use
+            return
+        PAIR["tries"] += 1
+        if PAIR["tries"] >= PAIR_TRIES:
+            PAIR.clear()
+            raise _err(403, "Wrong pairing code too often - create a new one on a registered device.")
+        raise _err(403, "The pairing code is wrong.")
 
 
 def remove(handler, dev_id: str) -> dict:
     _require_enabled()
+    if not getattr(handler, "_touchid_ok", None):  # gate() asks for it whenever a device exists
+        raise _err(403, "Removing a device needs a passkey confirmation.")
     with LOCK:
         data = _load()
         rest = [d for d in data["devices"] if d["id"] != dev_id]
         if len(rest) == len(data["devices"]):
             raise _err(404, "This device is not registered.")
         # The last device stays: otherwise passkeys would be off and anyone with tunnel access
-        # could register first. Switching only over SSH (keepwatch-passkey reset).
+        # could register first. To switch: add the new device first, then remove the old one.
         if not rest:
-            raise _err(409, f"The only device cannot be removed here. To switch: run \"{config.PASSKEY_CLI}\" on the server over SSH.")
+            raise _err(409, f"The last device cannot be removed - add another one first. All devices lost: run "
+                            f"\"{config.PASSKEY_CLI}\" on the server over SSH.")
         data["devices"] = rest
         _save(data)
     return {"ok": True, "active": bool(rest)}

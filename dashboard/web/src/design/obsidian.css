@@ -42,6 +42,8 @@ html[data-design^="obsidian"] {
   color-scheme: dark;
   background: var(--o-bg);
 }
+/* No sideways page scroll: glows and the dot field around fixed layers may reach past the viewport. */
+html[data-design^="obsidian"] { overflow-x: hidden; overflow-x: clip; }
 html[data-design^="obsidian"] body {
   background: var(--o-bg);
   color: var(--o-text);

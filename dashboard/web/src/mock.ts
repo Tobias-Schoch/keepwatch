@@ -11,6 +11,7 @@
  *   ?fresh   a fresh install: Tailscale not logged in, no Portainer token, no off-site backup
  *   ?ts      the request comes via Tailscale (allows closing port 22)
  *   ?closed  port 22 was closed two hours ago
+ *   ?fail=/api/backups/run,/api/settings   these endpoints (path prefixes) answer 500
  */
 import type { Access, AccessEntry, AccessHost, Backups, Container, Country, CountryCount, Docker, EnvVar, LoginIps, LogLine, Overview, Problem, RemoteRepoInput, Security, SecurityHistory, Settings, Sites, Stacks } from "./types";
 import { has, type ModuleId } from "./config";
@@ -231,7 +232,7 @@ const settings: Settings = {
     ? { configured: false, name: "Remote", repo: null, env: [], rcloneConf: false, check: null }
     : { configured: true, name: "S3", repo: REMOTE_REPO, env: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"], rcloneConf: false, check: { ok: true, at: now() - 11 * 3600, message: "Repository reachable and readable (14 snapshots)." } },
   portainer: FRESH ? { tokenSet: false, connected: false, reason: "No access token yet." } : { tokenSet: true, connected: true, reason: null },
-  fail2ban: { maxretry: 2, findtimeHours: 24, bantimeHours: 168, recidiveMaxretry: 2, recidiveFindtimeDays: 30, recidiveBantimeDays: 365, ignoreip: [] },
+  fail2ban: { sshMaxretry: 7, maxretry: 7, findtimeHours: 24, bantimeHours: 168, recidiveMaxretry: 2, recidiveFindtimeDays: 30, recidiveBantimeDays: 365, ignoreip: [] },
   updates: { autoReboot: true, rebootTime: "04:00" },
   myIps: MY_IPS,
   tailscale: FRESH
@@ -414,16 +415,17 @@ function security(): Security {
     audit: (has("auditd")
       ? {
           enabled: true,
-          total24h: 14,
+          total24h: 8 + (has("fail2ban") ? 3 : 0) + (has("firewall") ? 2 : 0) + (has("docker") ? 1 : 0),
+          // Watch keys of modules that are off do not show up (their files do not exist).
           byKey: [
             { key: "services", count: 6 },
-            { key: "fail2ban", count: 3 },
+            ...(has("fail2ban") ? [{ key: "fail2ban", count: 3 }] : []),
             { key: "ssh", count: 2 },
-            { key: "firewall", count: 2 },
-            { key: "docker", count: 1 },
+            ...(has("firewall") ? [{ key: "firewall", count: 2 }] : []),
+            ...(has("docker") ? [{ key: "docker", count: 1 }] : []),
           ],
           recent: [
-            { at: now() - 900, key: "fail2ban", exe: "/usr/bin/python3.12", path: "/etc/fail2ban/jail.d/keepwatch.local" },
+            ...(has("fail2ban") ? [{ at: now() - 900, key: "fail2ban", exe: "/usr/bin/python3.12", path: "/etc/fail2ban/jail.d/keepwatch.local" }] : []),
             { at: now() - 1800, key: "services", exe: "/usr/bin/systemctl", path: "/etc/systemd/system/keepwatch-dashboard.service" },
             { at: now() - 2400, key: "services", exe: "/usr/bin/rm", path: "/etc/systemd/system/old-tunnel.service" },
             { at: now() - 4000, key: "ssh", exe: "/usr/bin/vim.basic", path: "/root/.ssh/authorized_keys" },
@@ -615,9 +617,11 @@ export async function mockRequest(method: string, path: string, body: unknown): 
   await wait(method === "GET" ? 120 + rnd() * 160 : 500 + rnd() * 500);
   const url = new URL(path, location.origin);
   const p = url.pathname;
+  const failing = (q.get("fail") ?? "").split(",").filter(Boolean);
+  if (failing.some((f) => p.startsWith(f))) throw Object.assign(new Error(`Simulated server error on ${p}.`), { status: 500 });
   // Like the backend: endpoints of a disabled module answer 404 (lynis and updates: { enabled: false }).
   const off = ENDPOINT_MODULE.find(([re, m]) => re.test(p) && !has(m));
-  if (off) throw new Error(`The ${off[1]} module is not enabled (KW_MODULES in keepwatch.conf).`);
+  if (off) throw Object.assign(new Error(`The ${off[1]} module is not enabled (KW_MODULES in keepwatch.conf).`), { status: 404 });
   if (method === "GET" && ((p === "/api/lynis" && !has("lynis")) || (p === "/api/updates" && !has("docker")))) return OFF;
   const tl = mockTimeline(method, url); // timeline: mock-timeline.ts
   if (tl !== NOT_TIMELINE) return tl;

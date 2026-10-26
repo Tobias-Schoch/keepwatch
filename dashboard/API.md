@@ -19,7 +19,11 @@ ssh -L 9004:127.0.0.1:9004 root@<server>
 - Write calls are `POST`/`PUT`/`DELETE` and need the header `X-Dashboard: 1` (CSRF
   protection). `Host` must be `localhost`, `127.0.0.1` or `[::1]` with any port
   (protection against DNS rebinding); an `Origin`, if sent, must be `http://` on one of those.
-- Errors: HTTP 4xx/5xx with `{ "error": "An English sentence" }`.
+- Errors: HTTP 4xx/5xx with `{ "error": "An English sentence" }`. 400 = invalid request or body
+  (bodies must be a JSON object), 403 = Host/Origin/`X-Dashboard` check failed, 404 = unknown endpoint or module
+  off, 409 = conflicts with the current state. 502 = a system command failed (`systemctl`, `fail2ban-client`, …),
+  503 = something the endpoint needs is missing or not running (tool not installed, Proxy Manager database not
+  there yet, a database that cannot be opened), 504 = a system command timed out. 500 only for real bugs.
 - Dangerous calls (list `DANGER` in `server/touchid.py`) need a passkey once a device is
   registered (and `KW_DASHBOARD_PASSKEY="yes"`): first `428` with a challenge, then the same
   request with `X-Touch-ID` (section "Passkey").
@@ -452,7 +456,7 @@ and `outages`. While the proxy module is off, nothing is probed and both endpoin
   { interval: 60; since: number | null;
     sites: { domain; hostId; expect: string; url: string;
              last: { t; ok; ms; code; reason } | null; down: boolean; downSince: number | null; downReason: string | null;
-             uptime30: number | null;    // % of the checks of the last 30 days; null = not measured yet
+             uptime30: number | null;    // % of the checks of the last 30 days, 6 decimals; null = not measured yet
              avgMs24h: number | null;
              days: { day: "YYYY-MM-DD"; total: number; ok: number; downSec: number }[] }[] }   // 90 days, oldest first, KW_LOCAL_TZ
   ```
@@ -930,8 +934,10 @@ Each section is `{ enabled: false }` while its module is off.
             check: { ok: boolean; at: number; message: string } | null };   // last test; module backup
   portainer: { enabled: true; tokenSet: boolean; connected: boolean; reason: string | null };  // module portainer
   fail2ban: { enabled: true;
-              maxretry: number | null;     // failed logins through Tailscale before a ban (null without tailscale);
-                                           // from the internet sshd always bans on the first failure
+              sshMaxretry: number;         // failed SSH logins from the internet before a ban (jail sshd;
+                                           // KW_F2B_SSH_MAXRETRY, default 7)
+              maxretry: number | null;     // failed SSH logins through Tailscale before a ban (jail sshd-tailscale;
+                                           // default KW_F2B_SSH_MAXRETRY too; null without tailscale)
               findtimeHours: number; bantimeHours: number;
               recidiveMaxretry: number; recidiveFindtimeDays: number;   // repeat offenders: n bans in x days
               recidiveBantimeDays: number;                              // -> y days, all ports
@@ -972,8 +978,8 @@ Each section is `{ enabled: false }` while its module is off.
 - `DELETE /api/settings/remote` → removes the off-site repository and its credentials from the
   configuration (the data in the repository stays).
 - `PUT /api/settings/portainer` with `{ token: string }` → checks and saves → `{ ok: true }`
-- `PUT /api/settings/fail2ban` with `{ maxretry, findtimeHours, bantimeHours, recidiveMaxretry, recidiveFindtimeDays, recidiveBantimeDays, ignoreip }`
-  (`maxretry` only with the tailscale module) → writes `/etc/fail2ban/jail.d/zz-keepwatch-dashboard.local`,
+- `PUT /api/settings/fail2ban` with `{ sshMaxretry?, maxretry?, findtimeHours, bantimeHours, recidiveMaxretry, recidiveFindtimeDays, recidiveBantimeDays, ignoreip }`
+  (`sshMaxretry`/`maxretry` 1–50, each optional – a missing one keeps the current value; `maxretry` only with the tailscale module) → writes `/etc/fail2ban/jail.d/zz-keepwatch-dashboard.local`,
   tests with `fail2ban-client -t`, reloads.
 - `PUT /api/settings/updates` with `{ autoReboot, rebootTime }` → writes `52-auto-reboot`, the
   `apt-daily-upgrade.timer` override at `rebootTime` and the `apt-daily.timer` override (package
@@ -1055,7 +1061,7 @@ settings (more attempts, shorter windows/bans, new "never ban" entries) · lift 
 IP allowlist / path allowlist · create proxy host · redeploy stack · change **and view** environment variables
 (`GET /api/stacks/<id>/env`, plain text) · stop container · update/roll back an image · clean up · change/remove
 credentials of Proxy Manager, Portainer, off-site backup target · show backup password · shorten backup retention ·
-shorten log archive · add/remove passkey devices. A condition that raises counts as dangerous. Entries that belong to a
+shorten log archive · add/remove passkey devices, create a pairing code (`register/start` with a `pairCode` is not). A condition that raises counts as dangerous. Entries that belong to a
 disabled module are skipped (those endpoints answer 404 anyway), and `protects` lists only enabled ones.
 
 Without passkey: starting checks/scans, back up now, verify run, acknowledging, renewing certificates,
@@ -1082,23 +1088,34 @@ itself - every call through `api.get/post/put/del` gets the passkey step without
 
 ### Endpoints
 
-- `GET /api/touchid` → `{ enabled, active, crypto, rpId, rpUsable, here, devices: { id, name, kind: "passkey"|"app", rpId, created, lastUsed, here }[], pairing: null, protects: string[], ttl }`
-  (`enabled: false` = `KW_DASHBOARD_PASSKEY="no"`; then `active: false`, `devices: []`, `protects: []`)
-- `POST /api/touchid/register/start` `{ name }` → `{ challenge, rp: { id, name: "Keepwatch" }, user: { id, name, displayName }, exclude: string[], timeout }`.
-  Exactly one device: only while none is registered, otherwise 409.
+- `GET /api/touchid` → `{ enabled, active, crypto, rpId, rpUsable, here, devices: { id, name, kind: "passkey"|"app", rpId, created, lastUsed, here }[], pairing: { expires } | null, protects: string[], ttl }`
+  (`enabled: false` = `KW_DASHBOARD_PASSKEY="no"`; then `active: false`, `devices: []`, `pairing: null`, `protects: []`.
+  `pairing`: a pairing code is pending until `expires` - the code itself is only in the answer of `POST /api/touchid/pair`)
+- `POST /api/touchid/register/start` `{ name, pairCode? }` → `{ challenge, rp: { id, name: "Keepwatch" }, user: { id, name, displayName }, exclude: string[], timeout }`.
+  - No device yet: no confirmation (whoever registers first turns passkeys on). If another device gets registered
+    before `finish`, that `finish` fails with 409.
+  - Devices exist, without `pairCode`: dangerous ("Add another passkey device") - `428`, confirm with a registered
+    device **for this address** (another key on a device that can already confirm here).
+  - Devices exist, with `pairCode` (6 digits, spaces allowed): no `428`; the code is checked and used up at once (a
+    cancelled setup needs a new code). No pending code, expired, created before a `keepwatch-passkey reset` → `403`;
+    wrong → `403`, after 5 wrong attempts the code is dropped.
 - `POST /api/touchid/register/finish`
   - browser: `{ kind: "passkey", id, name, clientDataJSON, attestationObject }` (`attestation: "none"`, ES256)
   - macOS app: `{ kind: "app", id, name, publicKey (SPKI DER, base64url), clientDataJSON, authenticatorData, signature }`
   - → `{ ok, device }`. Checks `type = webauthn.create`, challenge, origin, RP ID, UP+UV, for `app` the signature.
-- `POST /api/touchid/pair` → always 409 (pairing codes were removed: exactly one device).
-- `DELETE /api/touchid/devices/<id>` (passkey) → `{ ok, active }`. The last device cannot be removed here (409) - switch
-  devices with `keepwatch-passkey reset` on the server.
+- `POST /api/touchid/pair` (passkey) → `{ code: "123456", expires }`. Pairing code for a device without a key (the macOS
+  app, another browser or computer, another address): 6 random digits, valid for **5 minutes**, **single use**,
+  **5 wrong attempts** and it is dropped. Only one code at a time - a new one replaces the pending one. Kept in memory
+  only (a dashboard restart drops it). No device registered yet → `409` (the first one needs no code).
+- `DELETE /api/touchid/devices/<id>` (passkey) → `{ ok, active }`. Any device can be removed except the **last** one
+  (`409`): otherwise passkeys would be off and anyone with tunnel access could register first. To switch devices,
+  add the new one first, then remove the old one. All devices lost: `keepwatch-passkey reset` on the server.
 
 Stored: `/etc/keepwatch/dashboard/passkeys.json` (600, part of the backup) - public keys, names, counters, times only.
 Verified with `python3-cryptography` (Ubuntu package); if it is missing while devices exist → `503` (closed, not open).
 Emergency: `keepwatch-passkey reset` on the server (`keepwatch-passkey list` shows the devices).
 
-### macOS app bridge (`window.webkit.messageHandlers.serverTouchID`)
+### macOS app bridge (`window.webkit.messageHandlers.keepwatchTouchID`, older apps: `serverTouchID`)
 
 `WKScriptMessageHandlerWithReply`; `postMessage(msg)` returns a promise. Errors as `{ error: "cancelled" | "unknown" | "unavailable" | <text> }`.
 Answers only the main frame of the dashboard in the app's own tunnel (`http://localhost:<local port for the dashboard>`),

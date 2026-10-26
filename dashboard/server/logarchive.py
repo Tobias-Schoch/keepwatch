@@ -491,6 +491,7 @@ def put_settings(body: dict) -> dict:
     text = ("# Keepwatch container log archive (keepwatch-log-archive). Changed in the dashboard\n"
             "# (Settings -> Log archive); the service re-reads this file every minute.\n"
             f"DAYS={conf['DAYS']}\nMAX_MB_PER_CONTAINER={conf['MAX_MB_PER_CONTAINER']}\nMAX_MB_TOTAL={conf['MAX_MB_TOTAL']}\n")
+    CONF.parent.mkdir(parents=True, exist_ok=True)
     tmp = CONF.with_name(CONF.name + ".tmp")
     tmp.write_text(text)
     os.chmod(tmp, 0o644)

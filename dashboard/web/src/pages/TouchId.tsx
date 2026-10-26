@@ -1,12 +1,25 @@
-import { Fingerprint, Laptop, Plus, RefreshCw, Smartphone, Trash2 } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import { Fingerprint, KeyRound, Laptop, Plus, RefreshCw, Smartphone, Trash2 } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, refreshAll, usePoll } from "../api";
+import { has } from "../config";
 import { Button, Callout, Confirm, CopyButton, Field, IconButton, Overlay, Pill } from "../design/ui";
-import { ago, dateTime } from "../format";
+import { ago, clock, dateTime } from "../format";
 import { useAction, useToast } from "../messages";
 import { appBridge, createCredential, defaultDeviceName, inApp, touchPrompt, type RegisterOptions, type TouchDevice, type TouchStatus } from "../touchid";
 import { DBody, DFoot } from "./settingsUi";
 import "./touchid.css";
+
+/** What makes things safer needs no passkey – only what exists with the installed modules is named. */
+function freeActions(): string[] {
+  return [
+    "checks and scans",
+    has("backup") && "backing up now",
+    "acknowledging",
+    has("proxy") && "renewing certificates",
+    has("firewall") && has("tailscale") && "closing port 22",
+    "longer retention",
+  ].filter((x): x is string => !!x);
+}
 
 /* Settings → Passkey: devices that may confirm dangerous actions (server/touchid.py). */
 
@@ -15,9 +28,12 @@ export function useTouchStatus(enabled = true) {
   return usePoll<TouchStatus>(enabled ? "/api/touchid" : null, 60 * 60_000);
 }
 
-/** Create a key on this device and register it (exactly one device: only while none is registered). */
-async function register(name: string) {
-  const o = await api.post<RegisterOptions>("/api/touchid/register/start", { name });
+/**
+ * Create a key on this device and register it. The first device needs nothing; every further one either a pairing
+ * code (from a registered device) or – without a code – a passkey confirmation of a registered device (428).
+ */
+async function register(name: string, pairCode?: string) {
+  const o = await api.post<RegisterOptions>("/api/touchid/register/start", pairCode ? { name, pairCode } : { name });
   const r = await createCredential(o, name);
   await api.post("/api/touchid/register/finish", { ...r, name });
 }
@@ -33,33 +49,97 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
   const { busy, run } = useAction();
   const toast = useToast();
   const [name, setName] = useState(defaultDeviceName);
+  const [code, setCode] = useState("");
+  const [pair, setPair] = useState<PairCode | null>(null);
   const [remove, setRemove] = useState<TouchDevice | null>(null);
+  // The code is gone on the server (used, dropped after wrong attempts, replaced): stop showing it.
+  const pending = st.pairing?.expires ?? null;
+  useEffect(() => {
+    if (pending === null) setPair(null);
+  }, [pending]);
   const done = () => {
     reload();
     refreshAll();
   };
   const app = !!appBridge();
   const blocked = !st.crypto || !st.rpUsable;
+  const digits = code.replace(/\D/g, "");
+  const codeOk = /^\d{6}$/.test(digits);
+  // Without a device for this address, a further device can only come in with a pairing code.
+  const needCode = st.active && !st.here;
 
-  const setup = () =>
-    void run("add", () => register(name.trim() || defaultDeviceName()), "Passkey is on. Dangerous actions now need your confirmation.").then((ok) => {
-      if (ok) done();
+  const setup = () => {
+    const n = name.trim() || defaultDeviceName();
+    void run("add", () => register(n, codeOk ? digits : undefined), st.active ? `Added "${n}".` : "Passkey is on. Dangerous actions now need your confirmation.").then((ok) => {
+      if (!ok) return;
+      setCode("");
+      done();
     });
+  };
 
   const addSection = (
     <div className="d-set-sub">
-      <h3 className="d-set-subhead">Set up this device</h3>
+      <h3 className="d-set-subhead">{!st.active ? "Set up this device" : st.here ? "Add another key here" : "Add this device"}</h3>
       <div className="flex flex-col gap-3">
         <Field label="Name" htmlFor="tid-name" hint={app ? "Key in this Mac's Secure Enclave, Touch ID only." : "Passkey with Touch ID, Face ID or Windows Hello."}>
           <input id="tid-name" className="o-input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} autoComplete="off" spellCheck={false} />
         </Field>
+        {st.active && (
+          <Field
+            label="Pairing code"
+            htmlFor="tid-code"
+            aside={needCode ? undefined : "optional"}
+            hint={
+              needCode
+                ? "Create it on a registered device: Settings → Passkey → Pair another device."
+                : "From a registered device. Without a code, a registered passkey on this device confirms first."
+            }
+          >
+            <input
+              id="tid-code"
+              className="o-input d-mono d-tid-code-in"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, "").slice(0, 7))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123 456"
+            />
+          </Field>
+        )}
         <div>
-          <Button variant="primary" disabled={!!busy || !name.trim()} onClick={setup}>
+          <Button variant={st.active ? "secondary" : "primary"} disabled={!!busy || !name.trim() || (code.trim() !== "" && !codeOk) || (needCode && !codeOk)} onClick={setup}>
             {busy === "add" ? <RefreshCw className="h-4 w-4 o-spin" /> : <Plus className="h-4 w-4" />}
-            {busy === "add" ? "Waiting for passkey…" : "Set up"}
+            {busy === "add" ? "Waiting for passkey…" : !st.active ? "Set up" : codeOk ? "Add with code" : "Add"}
           </Button>
         </div>
       </div>
+    </div>
+  );
+
+  const pairSection = (
+    <div className="d-set-sub">
+      <h3 className="d-set-subhead">Pair another device</h3>
+      {pair && pair.expires * 1000 > Date.now() ? (
+        <PairCodeView pair={pair} onGone={() => setPair(null)} />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="o-hint">For a device that has no key yet – the macOS app, another browser or computer. The code is valid for 5 minutes and works once.</p>
+          <div>
+            <Button
+              variant="secondary"
+              disabled={!!busy}
+              onClick={() =>
+                void run("pair", async () => {
+                  setPair(await api.post<PairCode>("/api/touchid/pair"));
+                  reload();
+                })
+              }
+            >
+              <KeyRound className="h-4 w-4" /> {busy === "pair" ? "Waiting for passkey…" : "Create pairing code"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -73,13 +153,13 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
             </Callout>
           ) : !st.active ? (
             <Callout tone="sand" title="Off – no device set up yet">
-              Until then everything works without confirmation. One device can be set up – Touch ID in the macOS app, or a passkey in your browser
-              (Touch ID, Windows Hello or a security key).
+              Until then everything works without confirmation, and the first device needs none either – so set it up right away: Touch ID in the macOS
+              app, or a passkey in your browser (Touch ID, Windows Hello or a security key). Every further device needs a passkey or a pairing code.
             </Callout>
           ) : !st.here ? (
             <Callout tone="sand" title={`No device is set up for ${st.rpId}`}>
-              Dangerous actions don't work here. Open the dashboard at the address where your device is set up (the macOS app uses localhost). To switch: run
-              <span className="d-mono"> keepwatch-passkey reset</span> on the server over SSH, then set it up again here.
+              Dangerous actions don't work here. Open the dashboard at the address where your device is set up (the macOS app uses localhost), or add
+              this device below with a pairing code from a registered one.
             </Callout>
           ) : (
             <Callout tone="ok" icon={Fingerprint} title="On">
@@ -112,7 +192,7 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
                       {!d.here && <> · {d.rpId}</>}
                     </div>
                   </div>
-                  <IconButton label={st.devices.length <= 1 ? "The only device – switch over SSH (keepwatch-passkey reset)" : `Remove ${d.name}`} size="sm" onClick={() => setRemove(d)} disabled={!!busy || st.devices.length <= 1}>
+                  <IconButton label={st.devices.length <= 1 ? "The last device – add another one first" : `Remove ${d.name}`} size="sm" onClick={() => setRemove(d)} disabled={!!busy || st.devices.length <= 1}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </IconButton>
                 </li>
@@ -120,7 +200,8 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
             </ul>
           )}
 
-          {!st.active && !blocked && addSection}
+          {st.active && st.here && pairSection}
+          {!blocked && addSection}
 
           <div className="d-set-sub">
             <h3 className="d-set-subhead">Needs a passkey</h3>
@@ -129,10 +210,10 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
                 <li key={p}>{p}</li>
               ))}
             </ul>
-            <p className="o-hint mt-3">No passkey needed: checks and scans, backing up now, acknowledging, renewing certificates, closing port 22, longer retention.</p>
+            <p className="o-hint mt-3">No passkey needed: {freeActions().join(", ")}.</p>
             <p className="o-hint mt-3 flex items-center gap-2">
               <span>
-                New device or lost one? On the server over SSH: <span className="d-mono">keepwatch-passkey reset</span>
+                Lost all devices? On the server over SSH: <span className="d-mono">keepwatch-passkey reset</span>
               </span>
               <CopyButton text="keepwatch-passkey reset" label="Copy command" />
             </p>
@@ -150,7 +231,7 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
           copy={{
             title: `Remove ${remove.name}?`,
             description: "This device can no longer confirm dangerous actions.",
-            note: st.devices.length === 1 ? "It's the last device: the passkey check turns off and everything works without confirmation again." : undefined,
+            note: remove.here && st.devices.filter((d) => d.here).length === 1 ? "It's the last device for this address: dangerous actions won't work here any more." : undefined,
             confirmLabel: "Remove",
             tone: "danger",
           }}
@@ -158,7 +239,7 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
           onConfirm={() =>
             void run("remove", () => api.del(`/api/touchid/devices/${encodeURIComponent(remove.id)}`)).then((ok) => {
               if (!ok) return;
-              toast(st.devices.length === 1 ? "Device removed – passkey check is off." : `Removed ${remove.name}.`);
+              toast(`Removed ${remove.name}.`);
               done();
             })
           }
@@ -168,6 +249,33 @@ export function TouchIdBody({ st, reload, close }: { st: TouchStatus; reload: ()
   );
 }
 
+interface PairCode {
+  code: string;
+  expires: number;
+}
+
+/** The pairing code, large, with a countdown; gone when it expires. */
+function PairCodeView({ pair, onGone }: { pair: PairCode; onGone: () => void }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (pair.expires * 1000 <= Date.now()) onGone();
+      else tick((n) => n + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [pair, onGone]);
+  const left = Math.max(0, Math.round(pair.expires - Date.now() / 1000));
+  return (
+    <div className="d-tid-pair">
+      <span className="d-tid-pair-code d-mono" aria-label={`Pairing code ${pair.code.split("").join(" ")}`}>
+        {pair.code.slice(0, 3)} {pair.code.slice(3)}
+      </span>
+      <span className="o-hint">
+        On the new device: Settings → Passkey → Pairing code. Valid until {clock(pair.expires)} ({Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} left), once.
+      </span>
+    </div>
+  );
+}
 
 /** Value of the row in the settings list. */
 export function touchRowValue(st: TouchStatus | null, error: string | null) {

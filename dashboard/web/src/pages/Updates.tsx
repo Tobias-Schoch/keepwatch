@@ -2,7 +2,7 @@ import { ArrowUpRight, ChevronDown, RefreshCw, RotateCcw, Trash2 } from "lucide-
 import { useState } from "react";
 import { api, usePoll, type Poll } from "../api";
 import { FoldToggle } from "../common";
-import { Button, Confirm, cx, Panel, Pill, type ConfirmCopy, type Tone } from "../design/ui";
+import { Button, Confirm, cx, Panel, Pill, type ConfirmCopy } from "../design/ui";
 import { has } from "../config";
 import { agoShort, bytes, fmtDate, shortDateTime } from "../format";
 import { useAction, useToast } from "../messages";
@@ -10,8 +10,8 @@ import { setMaintenanceOpen, useMaintenanceOpen } from "./servicesStore";
 import { busyUpdates, scanOf, versionOf, type Cleanup, type ImageUpdate, type ScanImage, type Updates } from "../updates";
 
 /**
- * Images (update, rollback, vulnerabilities) in an expanded service, hints for its header (updateIssues),
- * the "n updates available" chip and the collapsed "Maintenance" panel (check for updates, scan, cleanup).
+ * Images (update, rollback, vulnerabilities) in an expanded service, the "n updates available" chip
+ * and the collapsed "Maintenance" panel (check for updates, scan, cleanup).
  * The backend runs jobs in the background; meanwhile the page polls every 3 s (useUpdates) and reports the result.
  * Image updates and cleanup need the docker module, the scan needs image-scan, redeploys need portainer.
  */
@@ -59,30 +59,6 @@ export function gitText(u: Updates | null, stack: string | null): string | null 
   const g = stack && u ? (u.stacks ?? []).find((s) => s.name === stack) : undefined;
   if (!g) return null;
   return `${short(g.commit)}${g.deployedAt ? ` · ${shortDateTime(g.deployedAt)}` : ""}`;
-}
-
-/** What is pending for a service: updates, running or failed jobs, vulnerabilities. Empty = all good. */
-export function updateIssues(containers: string[], u: Updates | null): { tone: Tone; text: string; title?: string }[] {
-  if (!u) return [];
-  const out: { tone: Tone; text: string; title?: string }[] = [];
-  const items = (u.images ?? []).filter((i) => i.containers.some((c) => containers.includes(c)));
-  for (const i of items) {
-    const job = u.jobs?.[i.key];
-    const label = i.name ?? i.ref.split("/").pop()?.split(":")[0] ?? i.ref;
-    if (job?.state === "running") out.push({ tone: "accent", text: `${label}: ${job.action === "rollback" ? "rolling back" : "updating"} …` });
-    else if (job?.state === "error" && job.finishedAt && Date.now() / 1000 - job.finishedAt < 6 * 3600) out.push({ tone: "rose", text: `${label}: update failed`, title: job.message ?? undefined });
-    else if (i.status === "update") out.push({ tone: "sand", text: `${label} ${versionOf(i.remote)}${i.security ? " · security" : ""}`, title: `Update: ${i.ref} ${versionOf(i.local)} → ${versionOf(i.remote)}` });
-  }
-  let crit = 0;
-  let high = 0;
-  for (const e of Object.values(scanOf(u)?.images ?? {}))
-    if (e.containers.some((c) => containers.includes(c))) {
-      crit += e.critical;
-      high += e.high;
-    }
-  if (crit) out.push({ tone: "rose", text: crit === 1 ? "1 critical vulnerability" : `${crit} critical vulnerabilities` });
-  else if (high) out.push({ tone: "sand", text: high === 1 ? "1 high vulnerability" : `${high} high vulnerabilities` });
-  return out;
 }
 
 /** Job is running or ended at most 6 hr ago. */

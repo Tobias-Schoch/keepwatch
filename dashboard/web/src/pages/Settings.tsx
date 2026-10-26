@@ -114,6 +114,9 @@ const TYPICAL: Record<string, { label: string; env: string[] }> = {
   rest: { label: "REST server", env: ["RESTIC_REST_USERNAME", "RESTIC_REST_PASSWORD"] },
 };
 const scheme = (repo: string) => /^([a-z0-9]+):/.exec(repo.trim())?.[1] ?? "";
+/** Name the backend shows when REMOTE_NAME is empty (REPO_LABEL in server/dashboard.py). */
+const REPO_LABEL: Record<string, string> = { s3: "S3", b2: "Backblaze B2", sftp: "SFTP", rest: "REST server", rclone: "rclone", azure: "Azure", gs: "Google Cloud Storage", swift: "Swift" };
+const derivedName = (repo: string) => REPO_LABEL[scheme(repo)] ?? "Remote";
 
 interface EnvRow {
   id: number;
@@ -234,7 +237,8 @@ function RemoteForm({ r, onCancel, onSaved }: { r: Remote; onCancel: () => void;
   const { busy, run } = useAction();
   const toast = useToast();
   const [repo, setRepo] = useState(r.repo && !r.repo.includes("***@") ? r.repo : "");
-  const [name, setName] = useState(r.configured ? (r.name ?? "") : "");
+  // The server derives a name from the type ("S3") when none was set – don't carry that over as a custom name.
+  const [name, setName] = useState(r.configured && r.name && r.name !== derivedName(r.repo ?? "") ? r.name : "");
   const [rows, setRows] = useState<EnvRow[]>(() => (r.env ?? []).map((n) => ({ id: rowSeq++, name: n, value: "", stored: true })));
   const [rclone, setRclone] = useState("");
 
@@ -518,13 +522,14 @@ function PortainerBody({ p, reload, close }: { p: Settings["portainer"]; reload:
 function Fail2banBody({ f2b, myIps, reload, close }: { f2b: Settings["fail2ban"]; myIps: string[]; reload: () => void; close: () => void }) {
   const { busy, run } = useAction();
   const [f, setF] = useState({ ...f2b, ignoreip: f2b.ignoreip ?? [] });
-  // maxretry is null without Tailscale: from the internet, sshd bans on the first failure anyway.
+  // sshMaxretry: from the internet (jail sshd). maxretry: through Tailscale – null without the tailscale module.
   const tailnet = f.maxretry !== null;
+  const internet = typeof f.sshMaxretry === "number";
   const [ip, setIp] = useState("");
   const [bad, setBad] = useState<string | null>(null);
   const dirty = JSON.stringify(f) !== JSON.stringify({ ...f2b, ignoreip: f2b.ignoreip ?? [] });
   const valid =
-    (!tailnet || intOk(f.maxretry ?? NaN, 1, 50)) && intOk(f.findtimeHours, 1, 720) && intOk(f.bantimeHours, 1, 8760) &&
+    (!tailnet || intOk(f.maxretry ?? NaN, 1, 50)) && (!internet || intOk(f.sshMaxretry ?? NaN, 1, 50)) && intOk(f.findtimeHours, 1, 720) && intOk(f.bantimeHours, 1, 8760) &&
     intOk(f.recidiveMaxretry, 1, 50) && intOk(f.recidiveFindtimeDays, 1, 365) && intOk(f.recidiveBantimeDays, 1, 3650);
   const n = (v: number) => (Number.isFinite(v) ? v : "?");
   const add = (raw: string) => {
@@ -540,19 +545,19 @@ function Fail2banBody({ f2b, myIps, reload, close }: { f2b: Settings["fail2ban"]
     <>
       <DBody>
         <div className="flex flex-col gap-5">
-          <div className="d-fields is-3">
-            {tailnet ? (
-              <NumField id="s-f-retry" label="Failed attempts" value={f.maxretry ?? NaN} min={1} max={50} onChange={(maxretry) => setF({ ...f, maxretry })} />
-            ) : (
-              <Field label="Failed attempts" aside="SSH">
-                <div className="o-input d-num !flex items-center o-mute">1</div>
-              </Field>
+          <div className="d-fields is-2">
+            {internet && (
+              <NumField id="s-f-sretry" label="Failed SSH logins before a ban (internet)" value={f.sshMaxretry ?? NaN} min={1} max={50} onChange={(sshMaxretry) => setF({ ...f, sshMaxretry })} />
             )}
+            {tailnet && <NumField id="s-f-retry" label="Failed SSH logins before a ban (Tailscale)" value={f.maxretry ?? NaN} min={1} max={50} onChange={(maxretry) => setF({ ...f, maxretry })} />}
+          </div>
+          <div className="d-fields is-2">
             <NumField id="s-f-find" label="Time window" unit="hours" value={f.findtimeHours} min={1} max={720} onChange={(findtimeHours) => setF({ ...f, findtimeHours })} />
             <NumField id="s-f-ban" label="First ban" unit="hours" value={f.bantimeHours} min={1} max={8760} onChange={(bantimeHours) => setF({ ...f, bantimeHours })} />
           </div>
           <p className="o-hint -mt-2">
-            {tailnet ? `${n(f.maxretry ?? NaN)}×` : "First failure"} in {dur(f.findtimeHours)} → {dur(f.bantimeHours)}, then doubled each time (up to 1 year)
+            {[internet && `${n(f.sshMaxretry ?? NaN)}× from the internet`, tailnet && `${n(f.maxretry ?? NaN)}× through Tailscale`].filter(Boolean).join(", ") || "Failed logins"} in {dur(f.findtimeHours)} →{" "}
+            {dur(f.bantimeHours)}, then doubled each time (up to 1 year)
           </p>
           <div className="d-fields is-3">
             <NumField id="s-f-rretry" label="Repeat offenders" unit="bans" value={f.recidiveMaxretry} min={1} max={50} onChange={(recidiveMaxretry) => setF({ ...f, recidiveMaxretry })} />
@@ -783,7 +788,7 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
   const row = (key: SettingKey, icon: typeof Clock, value: ReactNode, state?: ReactNode, extra?: { hint?: string; id?: string }) =>
     show(key) ? <SettingRow key={key} icon={icon} title={settingTitle(key)} value={value} state={state} onOpen={() => setOpen(key)} hint={extra?.hint} id={extra?.id} /> : null;
 
-  const f2bHint = has("tailscale") ? "Applies inside the tailnet. From the internet, the first failed SSH attempt already bans." : "Limits for repeated failed logins.";
+  const f2bHint = has("tailscale") ? "Limits for failed SSH logins from the internet and through Tailscale." : "Limits for failed SSH logins.";
 
   const access = [
     ts &&
@@ -818,7 +823,8 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
         "fail2ban",
         ShieldBan,
         <>
-          <b>{f.maxretry ?? 1}×</b> / {durShort(f.findtimeHours)} → <b>{durShort(f.bantimeHours)}</b> · repeat offenders → <b>{f.recidiveBantimeDays} d</b>
+          <b>{f.sshMaxretry ?? f.maxretry ?? "?"}×</b>
+          {f.maxretry !== null && f.sshMaxretry !== undefined && f.maxretry !== f.sshMaxretry ? <> (Tailscale {f.maxretry}×)</> : null} / {durShort(f.findtimeHours)} → <b>{durShort(f.bantimeHours)}</b> · repeat offenders → <b>{f.recidiveBantimeDays} d</b>
           {(f.ignoreip?.length ?? 0) > 0 && <> · {f.ignoreip.length} never banned</>}
         </>,
         undefined,

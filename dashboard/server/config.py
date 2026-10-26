@@ -33,8 +33,9 @@ MODULE_NAMES = {"base": "Base system", "debloat": "Debloat", "auto-updates": "Au
                 "lynis": "Lynis", "proxy": "Reverse proxy", "portainer": "Portainer", "dashboard": "Dashboard"}
 
 # --- Paths (contract with modules/) -----------------------------------------------
-ETC = Path("/etc/keepwatch")
-VAR = Path("/var/lib/keepwatch")
+# KW_ETC / KW_VAR only for running the dashboard outside a server (tests); production uses the defaults.
+ETC = Path(os.environ.get("KW_ETC") or "/etc/keepwatch")
+VAR = Path(os.environ.get("KW_VAR") or "/var/lib/keepwatch")
 CONF_DIR = ETC / "dashboard"                       # dashboard secrets (tokens, passkeys, salt)
 STATE_DIR = VAR / "dashboard"                      # dashboard state (history, databases)
 LYNIS_JSON = VAR / "lynis.json"                    # written by keepwatch-lynis

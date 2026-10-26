@@ -109,6 +109,37 @@ export function GradeScore({ id, domain }: { id: number; domain: string }) {
   );
 }
 
+/**
+ * "Security 77/100" in the header of a service: 100 minus the deductions of all its sites together, not the average
+ * (three sites at 95 each → 85). A click opens the weakest site. Nothing without sites or without grades (no proxy).
+ */
+export function ServiceScore({ sites }: { sites: { id: number; domain: string }[] }) {
+  const ctx = useContext(GradeCtx);
+  if (!ctx?.data || !sites.length) return null;
+  const d = ctx.data;
+  const list = sites.map((s) => ({ ...s, g: gradeFor(d, s.id, s.domain) }));
+  const scored = list.filter((x): x is typeof x & { g: SiteGrade & { score: number } } => x.g?.score != null).sort((a, b) => a.g.score - b.g.score);
+  const checking = list.some((x) => d.checking?.includes(x.domain));
+  const score = scored.length ? Math.max(0, Math.round(100 - scored.reduce((n, x) => n + (100 - x.g.score), 0))) : null;
+  const open = scored[0] ?? list[0];
+  const title = [
+    ...list.map((x) => `${x.domain}: ${x.g?.score != null ? `${x.g.score}/100` : (x.g?.error ?? (d.checking?.includes(x.domain) ? "checking…" : "not checked yet"))}`),
+    ...(list.length > 1 ? ["Deductions of all sites added up"] : []),
+  ].join("\n");
+  return (
+    <button
+      type="button"
+      className={cx("sg-score-btn", checking && "is-checking")}
+      data-tone={securityTone(score, d.alertBelow)}
+      onClick={() => ctx.open(open.id, open.domain)}
+      title={`${title}\nClick: ${open.domain} – details`}
+      aria-label={`Security ${score ?? "not rated"} of 100 – details for ${open.domain}`}
+    >
+      Security {score ?? "–"}/100
+    </button>
+  );
+}
+
 /** "2 sites below 80" for a page header. Nothing while all have at least 80. */
 export function GradeSummaryChip({ domains }: { domains?: string[] }) {
   const ctx = useContext(GradeCtx);

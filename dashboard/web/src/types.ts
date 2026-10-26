@@ -190,7 +190,9 @@ export interface Settings {
   portainer: { enabled?: true; tokenSet: boolean; connected: boolean; reason: string | null };
   fail2ban: {
     enabled?: true;
-    /** Failed logins through Tailscale before a ban (null without tailscale; from the internet sshd bans on the first failure). */
+    /** Failed SSH logins from the internet before a ban (jail sshd; KW_F2B_SSH_MAXRETRY, default 7). */
+    sshMaxretry?: number;
+    /** Failed SSH logins through Tailscale before a ban (jail sshd-tailscale; null without the tailscale module). */
     maxretry: number | null; findtimeHours: number; bantimeHours: number;
     recidiveMaxretry: number; recidiveFindtimeDays: number; recidiveBantimeDays: number;
     ignoreip: string[];

@@ -93,7 +93,7 @@ def _day(t: float) -> str:
 
 def sites() -> list[dict]:
     """Enabled proxy hosts with their probe plan."""
-    con = sqlite3.connect(f"file:{D.NPM_DIR / 'database.sqlite'}?mode=ro", uri=True, timeout=5)
+    con = D.npm_db()
     con.row_factory = sqlite3.Row
     try:
         rows = con.execute("SELECT id, domain_names, forward_scheme, forward_host, forward_port, certificate_id, "
@@ -280,8 +280,9 @@ def loop():
             if started - last_compact > 6 * 3600:
                 compact()
                 last_compact = started
-        except Exception:  # noqa: BLE001 - an error must not end the thread
-            traceback.print_exc()
+        except Exception as e:  # noqa: BLE001 - an error must not end the thread
+            if getattr(e, "status", None) is None:  # ApiError (e.g. proxy database missing) is expected, no traceback
+                traceback.print_exc()
         time.sleep(max(5.0, INTERVAL - (time.time() - started)))
 
 
@@ -336,7 +337,7 @@ def summary() -> dict:
             "url": f"{'https' if s['https'] else 'http'}://{s['domain']}{s['path']}",
             "last": {"t": lr[1], "ok": bool(lr[2]), "ms": lr[3], "code": lr[4], "reason": lr[5]} if lr else None,
             "down": bool(open_), "downSince": open_[1] if open_ else None, "downReason": open_[3] if open_ else None,
-            "uptime30": round(100 * sum(x["ok"] for x in last30) / tot30, 3) if tot30 else None,
+            "uptime30": round(100 * sum(x["ok"] for x in last30) / tot30, 6) if tot30 else None,  # 6 decimals: services add up downtime
             "avgMs24h": ms24.get(s["domain"]),
             "days": series,
         })

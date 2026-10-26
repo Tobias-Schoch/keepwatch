@@ -101,18 +101,33 @@ def run(cmd: list[str] | str, timeout: float = 20, env: dict | None = None, chec
     try:
         full_env = {**os.environ, "LC_ALL": "C.UTF-8", "LANG": "C.UTF-8", **(env or {})}
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=full_env)
+    except FileNotFoundError:
+        if check:
+            raise ApiError(503, f"{cmd[0]} is not installed on this server.")
+        return ""
     except (OSError, subprocess.TimeoutExpired) as e:
         if check:
-            raise ApiError(500, f"{cmd[0]} did not finish: {e}")
+            raise ApiError(504 if isinstance(e, subprocess.TimeoutExpired) else 503, f"{cmd[0]} did not finish: {e}")
         return ""
     if check and p.returncode != 0:
         msg = (p.stderr or p.stdout).strip().splitlines()
-        raise ApiError(500, f"{cmd[0]} failed: {msg[-1] if msg else 'exit code ' + str(p.returncode)}")
+        raise ApiError(502, f"{cmd[0]} failed: {msg[-1] if msg else 'exit code ' + str(p.returncode)}")
     return p.stdout
 
 
 def now() -> float:
     return time.time()
+
+
+def npm_db(write: bool = False) -> sqlite3.Connection:
+    """The Proxy Manager's database. 503 with a clear message while it does not exist yet
+    (proxy container never started, or data elsewhere) instead of a bare sqlite error."""
+    path = NPM_DIR / "database.sqlite"
+    if not path.is_file():
+        raise ApiError(503, f"The Proxy Manager database is missing ({path}) – is the proxy container running?")
+    if write:
+        return sqlite3.connect(str(path), timeout=10)
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
 
 
 HUMAN = {"b": 1, "kb": 1e3, "mb": 1e6, "gb": 1e9, "tb": 1e12,
@@ -189,6 +204,8 @@ class Collector:
             try:
                 self.value = self.fn()
                 self.error = None
+            except ApiError as e:  # expected (e.g. the proxy database does not exist yet): no traceback
+                self.error = e.message
             except Exception as e:  # noqa: BLE001 - an error must not end the thread
                 self.error = str(e)
                 traceback.print_exc()
@@ -1457,7 +1474,7 @@ def log_stats(host_id: int) -> dict:
 
 
 def collect_sites():
-    con = sqlite3.connect(f"file:{NPM_DIR / 'database.sqlite'}?mode=ro", uri=True, timeout=5)
+    con = npm_db()
     con.row_factory = sqlite3.Row
     rows = con.execute("SELECT * FROM proxy_host WHERE is_deleted=0 ORDER BY id").fetchall()
     acl = collections.Counter()
@@ -1820,9 +1837,11 @@ def fail2ban_settings() -> dict:
             ignore.append(v)
     rec = num(f2b_get(config.JAIL_RECIDIVE, "bantime"), 604800)
     rec_find = num(f2b_get(config.JAIL_RECIDIVE, "findtime"), 86400)
-    # maxretry applies to logins through Tailscale; from the internet sshd bans on the first failure.
+    default = f2b_default_maxretry()
+    # sshMaxretry: failed logins from the internet (jail sshd); maxretry: through Tailscale (sshd-tailscale).
     return {"enabled": True,
-            "maxretry": num(f2b_get(config.JAIL_SSH_TAILNET, "maxretry"), 2) if tailnet else None,
+            "sshMaxretry": num(f2b_get(config.JAIL_SSH, "maxretry"), default),
+            "maxretry": num(f2b_get(config.JAIL_SSH_TAILNET, "maxretry"), default) if tailnet else None,
             "findtimeHours": max(1, num(f2b_get(main, "findtime"), 86400) // 3600),
             "bantimeHours": max(1, num(f2b_get(main, "bantime"), 604800) // 3600),
             "recidiveMaxretry": num(f2b_get(config.JAIL_RECIDIVE, "maxretry"), 2),
@@ -2048,10 +2067,29 @@ def _net_str(n) -> str:
     return str(n.network_address) if n.num_addresses == 1 else str(n)
 
 
+def f2b_default_maxretry() -> int:
+    """KW_F2B_SSH_MAXRETRY (failed SSH logins before a ban), 7 by default."""
+    v = config.get_int("KW_F2B_SSH_MAXRETRY", 7)
+    return v if 1 <= v <= 50 else 7
+
+
+def _current_maxretry(jail: str) -> int:
+    m = re.search(r"\d+", f2b_get(jail, "maxretry") or "")
+    v = int(m.group(0)) if m else f2b_default_maxretry()
+    return v if 1 <= v <= 50 else f2b_default_maxretry()
+
+
 def put_fail2ban(body):
     require("fail2ban")
+    if not isinstance(body, dict):
+        raise ApiError(400, "Expected a JSON object.")
     tailnet = config.enabled("tailscale")
-    maxretry = _int(body, "maxretry", 1, 50) if tailnet else None
+    # Both limits are optional: a missing one keeps what the jail uses right now.
+    ssh_retry = _int(body, "sshMaxretry", 1, 50) if body.get("sshMaxretry") is not None else _current_maxretry(config.JAIL_SSH)
+    if tailnet:
+        maxretry = _int(body, "maxretry", 1, 50) if body.get("maxretry") is not None else _current_maxretry(config.JAIL_SSH_TAILNET)
+    else:
+        maxretry = None
     findtime = _int(body, "findtimeHours", 1, 720)
     bantime = _int(body, "bantimeHours", 1, 8760)
     rec_retry = _int(body, "recidiveMaxretry", 1, 50)
@@ -2069,8 +2107,8 @@ def put_fail2ban(body):
     tailnet_nets = " 100.64.0.0/10 fd7a:115c:a1e0::/48" if tailnet else ""
     text = ("# Set by the Keepwatch dashboard. Overrides the fail2ban module's defaults.\n"
             f"[DEFAULT]\nignoreip = 127.0.0.1/8 ::1{extra}\n\n"
-            "# From the internet: always on the first failure (not adjustable).\n"
-            f"[{config.JAIL_SSH}]\nmaxretry = 1\nfindtime = {findtime}h\nbantime = {bantime}h\n"
+            "# From the internet.\n"
+            f"[{config.JAIL_SSH}]\nmaxretry = {ssh_retry}\nfindtime = {findtime}h\nbantime = {bantime}h\n"
             f"ignoreip = 127.0.0.1/8 ::1{tailnet_nets}{extra}\n\n")
     if tailnet:
         text += (f"[{config.JAIL_SSH_TAILNET}]\nmaxretry = {maxretry}\nfindtime = {findtime}h\nbantime = {bantime}h\n\n")
@@ -2093,9 +2131,11 @@ def put_fail2ban(body):
 
 def put_updates(body):
     require("auto-updates")
-    auto = bool(body.get("autoReboot"))
-    t = str(body.get("rebootTime", "04:00"))
-    if not HHMM.match(t):
+    if not isinstance(body.get("autoReboot"), bool):
+        raise ApiError(400, "\"autoReboot\" must be true or false.")
+    auto = body["autoReboot"]
+    t = body.get("rebootTime")
+    if not isinstance(t, str) or not HHMM.match(t):
         raise ApiError(400, "Please give the time as HH:MM.")
     # Updates run at t (KW_LOCAL_TZ); a needed reboot follows right after ("now"). A fixed
     # Reboot-Time would be wrong: shutdown would take the next occasion - after the updates
@@ -2128,7 +2168,7 @@ def put_updates(body):
 
 def _renew_cert(cert_id: int, force: bool) -> dict:
     db_path = NPM_DIR / "database.sqlite"
-    con = sqlite3.connect(str(db_path), timeout=10)
+    con = npm_db(write=True)
     row = con.execute("SELECT provider, meta FROM certificate WHERE id=? AND is_deleted=0", (cert_id,)).fetchone()
     if not row:
         con.close()
@@ -2172,7 +2212,7 @@ def _renew_cert(cert_id: int, force: bool) -> dict:
 
 def renew_site_cert(host_id: int, body: dict):
     require("proxy")
-    con = sqlite3.connect(f"file:{NPM_DIR / 'database.sqlite'}?mode=ro", uri=True, timeout=5)
+    con = npm_db()
     row = con.execute("SELECT certificate_id, domain_names FROM proxy_host WHERE id=? AND is_deleted=0", (host_id,)).fetchone()
     con.close()
     if not row or not row[0]:
@@ -2188,7 +2228,7 @@ def renew_site_cert(host_id: int, body: dict):
 
 def renew_due_certs():
     require("proxy")
-    con = sqlite3.connect(f"file:{NPM_DIR / 'database.sqlite'}?mode=ro", uri=True, timeout=5)
+    con = npm_db()
     ids = [r[0] for r in con.execute("SELECT DISTINCT certificate_id FROM proxy_host WHERE is_deleted=0 AND enabled=1 "
                                       "AND certificate_id > 0")]
     con.close()
@@ -2423,7 +2463,7 @@ def describe(entry: dict) -> dict:
 
 def get_access():
     require("proxy")
-    con = sqlite3.connect(f"file:{NPM_DIR / 'database.sqlite'}?mode=ro", uri=True, timeout=5)
+    con = npm_db()
     rows = con.execute("SELECT id, domain_names, advanced_config FROM proxy_host WHERE is_deleted=0 ORDER BY id").fetchall()
     con.close()
     hosts = []
@@ -2468,7 +2508,7 @@ def put_access(host_id: int, body: dict):
         clean = []
 
     db_path = NPM_DIR / "database.sqlite"
-    con = sqlite3.connect(str(db_path), timeout=10)
+    con = npm_db(write=True)
     row = con.execute("SELECT advanced_config FROM proxy_host WHERE id=? AND is_deleted=0", (host_id,)).fetchone()
     if not row:
         con.close()
@@ -2590,7 +2630,7 @@ def put_path_lock(host_id: int, body: dict):
         raise ApiError(400, "An empty list would lock the paths for everyone - you included.")
 
     db_path = NPM_DIR / "database.sqlite"
-    con = sqlite3.connect(str(db_path), timeout=10)
+    con = npm_db(write=True)
     row = con.execute("SELECT advanced_config, certificate_id, ssl_forced, hsts_enabled FROM proxy_host "
                       "WHERE id=? AND is_deleted=0", (host_id,)).fetchone()
     if not row:
@@ -2714,6 +2754,12 @@ def health(cur, dsk, updates) -> list[dict]:
     sec = safe("security")
     if on("fail2ban"):
         need = {config.JAIL_SSH} | ({config.JAIL_SSH_TAILNET} if on("tailscale") else set())
+        if (sec is None or not need <= {j["name"] for j in sec["jails"]}) \
+                and now() - COLLECTORS["security"].at > 10:
+            # The cached value may stem from a fail2ban restart (every deploy
+            # that touches fail2ban) - look again before raising a red problem.
+            COLLECTORS["security"].refresh()
+            sec = safe("security")
         if sec is None or not need <= {j["name"] for j in sec["jails"]}:
             add("crit", "security", "fail2ban is not protecting SSH",
                 f"The jail {' or '.join(sorted(need))} is not running.", "fail2ban.ssh-jail")
@@ -2940,7 +2986,12 @@ class Handler(BaseHTTPRequestHandler):
         return self._body_cache
 
     def _read_body(self) -> dict:
-        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ApiError(400, "Invalid Content-Length.")
+        if n < 0:
+            raise ApiError(400, "Invalid Content-Length.")
         if n > 1_000_000:
             raise ApiError(413, "Request too large.")
         if not n:
@@ -2969,6 +3020,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, res)
         except ApiError as e:
             self._json(e.status, {"error": e.message, **getattr(e, "extra", {})})
+        except sqlite3.Error as e:  # a database that is missing, locked or not ours yet
+            self._json(503, {"error": f"Database not available: {e}"})
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             self._json(500, {"error": f"Internal error: {e}"})

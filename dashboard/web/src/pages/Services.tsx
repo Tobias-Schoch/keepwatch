@@ -4,26 +4,28 @@ import { EVERY, usePoll } from "../api";
 import { useConfig } from "../config";
 import { Chips, Loading, PageHero, Stale, StateDot } from "../common";
 import { Button, Callout, cx, Panel, Pill, type Tone } from "../design/ui";
-import { agoShort, bytes, pct, plural, shortDateTime, span } from "../format";
+import { agoShort, bytes, duration, num, pct, plural, shortDateTime, span } from "../format";
 import { LogsButton } from "../logs/LogsButton";
 import { useNav } from "../nav";
 import { openSetting } from "./settingsOpen";
 import type { Container, Docker, Site, Sites, Stack, Stacks } from "../types";
 import { useUpdates } from "../updates";
-import { useUptime, type UptimeSummary } from "../uptime";
+import { useUptime, type UptimeSite, type UptimeSummary } from "../uptime";
 import { Detail, HEALTH_LABEL, STATE_LABEL, stateTone } from "./Containers";
 import { NewSiteWizard } from "./NewSite";
-import { GradeScore, SiteGradeProvider } from "./SiteGrade";
-import { RenewDueButton, siteHost, siteIssues, SiteList, siteTone, useSiteActions } from "./Sites";
+import { ServiceScore, SiteGradeProvider } from "./SiteGrade";
+import { RenewDueButton, siteHost, SiteList, siteTone, useSiteActions } from "./Sites";
 import { branch, EnvSheet, Redeploy, repoName } from "./Stacks";
-import { BlockUpdates, gitText, Maintenance, updateIssues } from "./Updates";
-import { setServiceOpen, useServiceOpen } from "./servicesStore";
+import { BlockUpdates, gitText, Maintenance } from "./Updates";
+import { setServiceOpen, takeWantedSite, useServiceOpen, useWantedSite } from "./servicesStore";
 import { versionOf, type Updates } from "../updates";
 import "./services.css";
 import "./servicesPalette";
 
 /**
- * Services: one quiet row per stack – status, name, sites with their security grade, only problems, logs.
+ * Services: one quiet row per stack – status, name, "Security <score>/100" and "Uptime <value> %", logs. Both figures
+ * cover all sites of the service together: deductions and downtime add up, they are not averaged. Problems show in the
+ * status dot; the details are one click away.
  * Expanded (click the row, remembered in the browser) the summary in the header gives way to the rows below:
  * repo and deployed commit with variables and redeploy, sites (grade, problems, uptime, access),
  * images only with an update, vulnerabilities or "roll back", containers (problems, memory · CPU). Details in tooltips.
@@ -32,7 +34,8 @@ import "./servicesPalette";
  * sites without a known container end up under "Other".
  *
  * Modules: the page needs docker. Stacks, variables and redeploy need portainer – without it, containers
- * are grouped by their compose project. Sites, certificates, grades and uptime need proxy.
+ * are grouped by their compose project. Sites, certificates, grades and uptime need proxy – without it a row has no
+ * Security/Uptime figures at all.
  */
 
 interface Block {
@@ -43,12 +46,6 @@ interface Block {
   containers: Container[];
   sites: Site[];
   missing: string[];
-}
-
-interface Issue {
-  tone: Tone;
-  text: string;
-  title?: string;
 }
 
 const worst = (t: Tone[]): Tone => (t.includes("rose") ? "rose" : t.includes("sand") ? "sand" : "ok");
@@ -109,20 +106,6 @@ function buildBlocks(stacks: Stack[], containers: Container[], sites: Site[]): B
   return [...blocks, ...(other.containers.length || other.sites.length ? [other] : [])].sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 
-/** What's wrong with the containers of a service. */
-function containerIssues(b: Block): Issue[] {
-  const out: Issue[] = [];
-  if (b.missing.length) out.push({ tone: "rose", text: `${plural(b.missing.length, "container", "containers")} missing`, title: b.missing.join(", ") });
-  const bad = b.containers.filter(isProblem);
-  if (bad.length === 1) out.push({ tone: stateTone(bad[0]), text: `${bad[0].name} ${stateLabel(bad[0])}`, title: bad[0].status });
-  else if (bad.length > 1) out.push({ tone: worst(bad.map(stateTone)), text: `${bad.length} containers with problems`, title: bad.map((c) => `${c.name}: ${stateLabel(c)}`).join("\n") });
-  for (const c of b.containers) {
-    if (c.privileged) out.push({ tone: "rose", text: `${c.name} privileged`, title: "Runs privileged" });
-    if (c.restartCount > 3) out.push({ tone: "sand", text: `${c.name}: ${c.restartCount} restarts` });
-  }
-  return out;
-}
-
 /** Containers of a service: name, only problems, memory · CPU on the right. Click opens logs and actions. */
 function ContainerList({ list, u, onOpen }: { list: Container[]; u: Updates | null; onOpen: (name: string) => void }) {
   return (
@@ -175,28 +158,28 @@ function ContainerList({ list, u, onOpen }: { list: Container[]; u: Updates | nu
   );
 }
 
-/** Sites in the header: domain as a link, then the security grade and only what's wrong. */
-function HeadSites({ sites, uptime }: { sites: Site[]; uptime: UptimeSummary | null }) {
-  if (!sites.length) return null;
+/**
+ * "Uptime 99.998843 %" in the header: the downtime of all enabled sites over the last 30 days added up, not averaged
+ * (three sites with 8 minutes of downtime between them count 8 minutes, not 2.7). Nothing without uptime data.
+ */
+function ServiceUptime({ sites, uptime }: { sites: Site[]; uptime: UptimeSummary | null }) {
+  const list = sites
+    .filter((s) => s.enabled)
+    .map((s) => uptime?.sites.find((u) => u.domain === s.domains[0]))
+    .filter((u): u is UptimeSite & { uptime30: number } => u?.uptime30 != null);
+  if (!list.length) return null;
+  const value = Math.max(0, 100 - list.reduce((n, u) => n + (100 - u.uptime30), 0));
+  const down = list.filter((u) => u.down);
+  const tone: Tone = down.length ? "rose" : value < 99 ? "sand" : "ok";
+  const now = Date.now() / 1000;
+  const title = [
+    ...down.map((u) => `${u.domain}: down for ${duration(now - (u.downSince ?? now))}${u.downReason ? ` – ${u.downReason}` : ""}`),
+    ...list.map((u) => `${u.domain}: ${num(u.uptime30, 6)} %`),
+    list.length > 1 ? "Last 30 days, downtime of all sites added up" : "Last 30 days",
+  ].join("\n");
   return (
-    <span className="svc-sites">
-      {sites.map((s) => {
-        const d = s.domains[0];
-        const issues = siteIssues(s, uptime?.sites.find((u) => u.domain === d));
-        return (
-          <span key={s.id} className={cx("svc-site", !s.enabled && "is-off")}>
-            <a href={`https://${d}`} target="_blank" rel="noreferrer" title={`Open ${d}`}>
-              {d}
-            </a>
-            {s.enabled && <GradeScore id={s.id} domain={d} />}
-            {issues.map((x) => (
-              <span key={x.text} className="svc-issue" data-tone={x.tone} title={x.title}>
-                {x.text}
-              </span>
-            ))}
-          </span>
-        );
-      })}
+    <span className="svc-issue" data-tone={tone} title={title}>
+      Uptime {num(value, 6)} %
     </span>
   );
 }
@@ -218,8 +201,8 @@ interface RowProps {
 function ServiceRow({ b, open, u, uptime, connected, site, onContainer, onEnv, onDeploy, onUpdated }: RowProps) {
   const s = b.stack;
   const names = b.containers.map((c) => c.name);
-  const issues = [...containerIssues(b), ...updateIssues(names, u)];
   const tone = blockTone(b);
+  const live = b.sites.filter((x) => x.enabled);
   const toggle = () => setServiceOpen(b.key, !open);
   return (
     <Panel className={cx("d-block svc-block", open && "is-open")} id={`service-${b.key}`}>
@@ -237,12 +220,8 @@ function ServiceRow({ b, open, u, uptime, connected, site, onContainer, onEnv, o
         <h2 className="d-block-title">{b.title}</h2>
         {!open && (
           <span className="svc-info">
-            <HeadSites sites={b.sites} uptime={uptime} />
-            {issues.map((x) => (
-              <Pill key={x.text} tone={x.tone} title={x.title}>
-                {x.text}
-              </Pill>
-            ))}
+            <ServiceScore sites={live.map((x) => ({ id: x.id, domain: x.domains[0] }))} />
+            <ServiceUptime sites={live} uptime={uptime} />
           </span>
         )}
         <LogsButton title={b.title} containers={names} className="ml-auto" />
@@ -303,6 +282,20 @@ export function ServicesPage() {
   );
 }
 
+/** Command palette → site: expand the service that holds it (collapsed rows have no domain links). */
+function OpenWantedSite({ blocks, ready }: { blocks: Block[]; ready: boolean }) {
+  const want = useWantedSite();
+  useEffect(() => {
+    // ready: stacks and sites are in – before that a service may still be keyed by its compose project
+    if (!want || !ready) return;
+    const b = blocks.find((x) => x.sites.some((s) => s.domains.some((d) => d.toLowerCase() === want)));
+    if (!b) return; // sites not loaded yet – try again with the next data
+    takeWantedSite();
+    setServiceOpen(b.key, true);
+  }, [want, blocks, ready]);
+  return null;
+}
+
 /** Subscribes to /api/uptime only while mounted – i.e. only with the proxy module. */
 function UptimeFeed({ onData }: { onData: (u: UptimeSummary | null) => void }) {
   const data = useUptime().data;
@@ -343,6 +336,7 @@ function ServicesBody() {
           const sc = scanOn ? upd.data?.scan : undefined;
           return (
             <>
+              <OpenWantedSite blocks={blocks} ready={(!portainer || !!st.data) && (!proxy || !!sd)} />
               <PageHero
                 title={bad.length ? `${plural(bad.length, "service needs", "services need")} you.` : `${plural(services.length, "service", "services")} running.`}
                 shine={bad.length ? 2 : 1}

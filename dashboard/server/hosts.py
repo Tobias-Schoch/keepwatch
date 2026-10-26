@@ -286,7 +286,7 @@ def domain_list(domain: str, www: bool) -> list[str]:
 
 
 def _db():
-    return sqlite3.connect(f"file:{D.NPM_DIR / 'database.sqlite'}?mode=ro", uri=True, timeout=5)
+    return D.npm_db()
 
 
 def taken(domains: list[str]) -> list[dict]:

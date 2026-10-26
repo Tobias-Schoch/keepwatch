@@ -91,8 +91,13 @@ async function send(method: Method, path: string, body: unknown, proof?: string)
     setOnline(true);
     if (gated) return gated;
     const { mockRequest } = await import("./mock");
-    const res = await mockRequest(method, path, body);
-    return { ok: true, status: 200, data: res };
+    try {
+      return { ok: true, status: 200, data: await mockRequest(method, path, body) };
+    } catch (e) {
+      // Like the backend: errors are 4xx/5xx with { error }.
+      const status = (e as { status?: number }).status ?? 400;
+      return { ok: false, status, data: { error: e instanceof Error ? e.message : String(e) } };
+    }
   }
   let res: Response;
   try {

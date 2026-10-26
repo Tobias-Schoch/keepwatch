@@ -42,6 +42,23 @@ export function setServiceOpen(key: string, v: boolean) {
 
 export const useServiceOpen = () => useSyncExternalStore(subscribe, () => open);
 
+/** Site the command palette wants to show: the Services page expands the service that holds it
+ * (only the page knows which one) and clears the wish. */
+let wantedSite: string | null = null;
+
+export function showSite(domain: string) {
+  wantedSite = domain.toLowerCase();
+  emit();
+}
+
+export function takeWantedSite(): string | null {
+  const v = wantedSite;
+  wantedSite = null;
+  return v;
+}
+
+export const useWantedSite = () => useSyncExternalStore(subscribe, () => wantedSite);
+
 export function setMaintenanceOpen(v: boolean) {
   if (maint === v) return;
   maint = v;

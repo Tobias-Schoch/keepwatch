@@ -107,7 +107,7 @@ function site(s: Site): UptimeSite {
     down: !!open,
     downSince: open?.start ?? null,
     downReason: open?.reason ?? null,
-    uptime30: tot ? Math.round((100000 * last30.reduce((a, d) => a + d.ok, 0)) / tot) / 1000 : null,
+    uptime30: tot ? Math.round((1e8 * last30.reduce((a, d) => a + d.ok, 0)) / tot) / 1e6 : null, // 6 decimals like uptime.py
     avgMs24h: p.baseMs + 4,
     days,
   };
