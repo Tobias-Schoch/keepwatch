@@ -1,0 +1,109 @@
+#!/bin/bash
+# Keepwatch firewall: the complete inbound firewall of this server, in one file.
+#
+#   From the internet only:  SSH (unless closed, see below), KW_PUBLIC_TCP (default 80, 443)
+#   Everything else - admin UIs, databases, ports your containers publish -
+#   is reachable only through an SSH tunnel to 127.0.0.1.
+#
+# An ALLOW-list, not a block-list: a block-list always misses the port you
+# did not think of (a new container publishing 3000 is open the moment it
+# starts). Here every new port is closed until you allow it.
+#
+# Why its own service and not ufw or netfilter-persistent: Docker writes its
+# own iptables rules for published ports and bypasses ufw - `ufw status` does
+# not show such a port, open it is anyway. The chain DOCKER-USER is created
+# by Docker itself; rules restored at boot BEFORE Docker runs can silently
+# vanish. This service runs after Docker - and, thanks to PartOf, again after
+# every Docker restart (e.g. by the automatic updates).
+#
+# Two places, because Docker takes two paths:
+#   DOCKER-USER  IPv4 (and IPv6 where Docker does NAT): traffic to containers.
+#                --ctorigdstport, not --dport: here the port is already
+#                translated to the container port (published 8080 may be 80
+#                inside). A rule on --dport hits the wrong service or none;
+#                --ctorigdstport knows the original port before translation.
+#   INPUT        IPv6 often runs through docker-proxy on the host itself and
+#                thus past DOCKER-USER. Also covers everything listening
+#                directly on the host.
+#
+# Make a new port public? Better not - put it behind the proxy (443).
+# Otherwise: KW_PUBLIC_TCP in keepwatch.conf, then deploy.
+set -eu
+
+KW_PUBLIC_TCP="80 443"
+KW_PUBLIC_UDP=""
+# shellcheck disable=SC1091
+[ -f /etc/keepwatch/keepwatch.conf ] && . /etc/keepwatch/keepwatch.conf
+
+# SSH from the internet: switchable in the dashboard (Settings -> Remote access),
+# file written by the dashboard and the SSH fallback. Closed means SSH only
+# over Tailscale (tailscale0 is not $IFACE and stays open). Without the file,
+# SSH stays open.
+SSH_PUBLIC=yes
+# shellcheck disable=SC1091
+[ -f /etc/keepwatch/firewall.env ] && . /etc/keepwatch/firewall.env
+if [ "$SSH_PUBLIC" = no ] && ! { command -v tailscale >/dev/null && systemctl is-enabled -q tailscaled 2>/dev/null; }; then
+  # Never close SSH without the way around it.
+  echo "SSH_PUBLIC=no, but Tailscale is not installed/enabled - SSH stays open" >&2
+  SSH_PUBLIC=yes
+fi
+
+# The port(s) sshd really listens on - a custom port must never be locked out.
+install -d -m 755 /run/sshd
+SSH_PORTS=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -u | tr '\n' ' ')
+SSH_PORTS=${SSH_PORTS:-22}
+
+IFACE=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "dev") {print $(i + 1); exit}}')
+[ -n "$IFACE" ] || IFACE=$(ip -6 route get 2606:4700:4700::1111 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "dev") {print $(i + 1); exit}}')
+[ -n "$IFACE" ] || { echo "no interface to the internet found" >&2; exit 1; }
+
+TCP="$KW_PUBLIC_TCP"
+[ "$SSH_PUBLIC" = no ] || TCP="$SSH_PORTS $TCP"
+# shellcheck disable=SC2086 # word splitting joins the port lists
+TCP_LIST=$(echo $TCP | tr ' ' ',')
+# shellcheck disable=SC2086
+SSH_LIST=$(echo $SSH_PORTS | tr ' ' ',')
+# Nothing public at all: drop every new TCP connection.
+if [ -n "$TCP_LIST" ]; then ALLOW=(-m multiport ! --dports "$TCP_LIST"); else ALLOW=(); fi
+
+docker_user() {  # the DOCKER-USER chain, replaced in one transaction (no open window)
+  local p
+  echo "*filter"
+  echo ":DOCKER-USER - [0:0]"
+  echo "-A DOCKER-USER -i $IFACE -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN"
+  for p in $KW_PUBLIC_TCP; do echo "-A DOCKER-USER -i $IFACE -p tcp -m conntrack --ctorigdstport $p -j RETURN"; done
+  for p in $KW_PUBLIC_UDP; do echo "-A DOCKER-USER -i $IFACE -p udp -m conntrack --ctorigdstport $p -j RETURN"; done
+  echo "-A DOCKER-USER -i $IFACE -j DROP"
+  echo "-A DOCKER-USER -j RETURN"
+  echo "COMMIT"
+}
+
+for T in iptables ip6tables; do
+  if command -v docker >/dev/null; then
+    docker_user | "$T-restore" --noflush
+  fi
+
+  # INPUT: only NEW TCP connections. Established ones, ICMPv6 (IPv6 does not
+  # work without it) and UDP (Tailscale, DNS replies) stay untouched.
+  # Keepwatch's rules carry the comment "keepwatch". New rules go in first,
+  # the old ones out afterwards - no moment without the firewall.
+  OLD=$($T -S INPUT | grep -- '--comment keepwatch' || true)
+  $T -I INPUT 1 -i "$IFACE" -p tcp -m conntrack --ctstate NEW "${ALLOW[@]}" -m comment --comment keepwatch -j DROP
+  # SSH closed: log every rejected attempt (before the DROP). The dashboard
+  # counts them, fail2ban (jail ssh-closed) bans the senders. Rate-limited so
+  # a scan storm cannot flood the journal.
+  if [ "$SSH_PUBLIC" = no ]; then
+    $T -I INPUT 1 -i "$IFACE" -p tcp -m multiport --dports "$SSH_LIST" -m conntrack --ctstate NEW \
+      -m limit --limit 60/min --limit-burst 120 -m comment --comment keepwatch -j LOG --log-prefix ssh-closed: --log-level 6
+  fi
+  while IFS= read -r rule; do
+    [ -n "$rule" ] || continue
+    # eval: -S prints the LOG prefix in quotes ("ssh-closed:"); the spec
+    # comes from iptables itself, not from input.
+    eval "$T -D ${rule#-A }" 2>/dev/null || true
+  done <<<"$OLD"
+done
+if [ "$SSH_PUBLIC" = no ]; then SSH_STATE="SSH closed (Tailscale only)"; else SSH_STATE="SSH public on $SSH_LIST"; fi
+# shellcheck disable=SC2086
+UDP_LIST=$(echo $KW_PUBLIC_UDP | tr ' ' ',')
+echo "firewall set on $IFACE: public TCP ${TCP_LIST:-none}${UDP_LIST:+, public UDP to containers $UDP_LIST}, $SSH_STATE (IPv4 + IPv6)"

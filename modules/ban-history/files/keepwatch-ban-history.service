@@ -1,0 +1,12 @@
+[Unit]
+Description=Keepwatch ban history: ban past SSH attackers on all ports (nftables inet keepwatch_ban_history)
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/keepwatch-ban-history apply
+
+[Install]
+WantedBy=multi-user.target

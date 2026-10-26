@@ -1,0 +1,4 @@
+# Module install.sh/remove.sh are sourced by lib/apply.sh: bash, and variables cross file boundaries.
+shell=bash
+external-sources=true
+disable=SC1090,SC1091,SC2034

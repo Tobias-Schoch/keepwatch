@@ -1,0 +1,61 @@
+/* React Bits tiles for Obsidian (all variants): Counter and MetaBalls. */
+
+/* ---- Counter: odometer ------------------------------------------------------------------ */
+html[data-design^="obsidian"] .o-counter { display: inline-flex; vertical-align: baseline; }
+html[data-design^="obsidian"] .o-counter-row {
+  display: inline-flex;
+  /* A little air above and below so the mask never clips the digit itself. */
+  margin: -0.05em 0;
+  padding: 0.05em 0;
+  -webkit-mask: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
+  mask: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
+}
+html[data-design^="obsidian"] .o-counter-d { position: relative; display: inline-block; overflow: hidden; height: 1.1em; line-height: 1.1em; }
+html[data-design^="obsidian"] .o-counter-sizer { visibility: hidden; display: block; }
+html[data-design^="obsidian"] .o-counter-wheel { position: absolute; inset: 0; }
+html[data-design^="obsidian"] .o-counter-n {
+  position: absolute;
+  inset: 0;
+  display: block;
+  text-align: center;
+}
+html[data-design^="obsidian"] .o-counter-sign { display: inline-block; line-height: 1.1em; }
+
+/* Large hero number: the metal gradient sits on every digit separately, because a
+   background-clip gradient over moving children doesn't follow along everywhere. */
+html[data-design^="obsidian"] .o-hero-num .o-num.o-counter {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--o-text);
+  padding-bottom: 0;
+}
+html[data-design^="obsidian"] .o-hero-num .o-counter-d { height: 1em; line-height: 1em; }
+html[data-design^="obsidian"] .o-hero-num .o-counter-n,
+html[data-design^="obsidian"] .o-hero-num .o-counter-sign {
+  background: linear-gradient(180deg, var(--o-hi) 20%, var(--o-silver-dim) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- MetaBalls: living background of the hero tile -------------------------------------- */
+html[data-design^="obsidian"] .o-metaballs {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 1.2s var(--o-ease);
+  /* Lively in the top right, fading out towards the big number and the footer. */
+  -webkit-mask: radial-gradient(85% 100% at 94% 8%, #000 14%, rgba(0, 0, 0, 0.5) 42%, transparent 72%);
+  mask: radial-gradient(85% 100% at 94% 8%, #000 14%, rgba(0, 0, 0, 0.5) 42%, transparent 72%);
+}
+html[data-design^="obsidian"] .o-metaballs.is-on { opacity: 1; }
+html[data-design^="obsidian"] .o-metaballs canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+html[data-design^="obsidian"] .o-tile-in:hover .o-metaballs { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-design^="obsidian"] .o-metaballs { transition: none; }
+}

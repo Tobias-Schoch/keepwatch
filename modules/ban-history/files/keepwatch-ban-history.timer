@@ -1,0 +1,13 @@
+[Unit]
+Description=Keepwatch ban history: rebuild daily (expired addresses drop out)
+
+[Timer]
+# Its own unit: keepwatch-ban-history.service stays "active" after boot
+# (RemainAfterExit), so a timer starting it again would do nothing.
+Unit=keepwatch-ban-history-refresh.service
+# Rewritten by the ban-history module (05:15 in KW_LOCAL_TZ).
+OnCalendar=*-*-* 05:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

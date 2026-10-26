@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Weekly hardening audit with Lynis (Ubuntu package `lynis`).
+
+Runs as keepwatch-lynis.service (weekly timer, or "Check now" in the dashboard).
+Lynis only reads: it changes nothing on the system, but writes /var/log/lynis.log and
+/var/log/lynis-report.dat. From those this script builds a compact JSON for the
+dashboard: /var/lib/keepwatch/lynis.json (read by the dashboard's lynis.py).
+
+  last      the latest run: hardening index, date, warnings and suggestions per test ID,
+            sub-findings (SSH option, sysctl key, file ...) as `items`
+  history   the last runs (newest first) with only the index and the keys of the
+            findings - enough to spot "dropped" and "new"
+
+What is deliberately the way it is lives in /etc/keepwatch/lynis-exceptions.conf.
+The list is applied only in the dashboard: the report stays complete, the index stays
+the one Lynis computed (comparable over time), and a changed reason takes effect at once.
+
+To try it without a run (read-only, writes nothing):
+  keepwatch-lynis --parse /var/log/lynis-report.dat /var/log/lynis.log
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+REPORT = Path("/var/log/lynis-report.dat")
+LOG = Path("/var/log/lynis.log")
+STATE = Path("/var/lib/keepwatch")
+OUT = STATE / "lynis.json"
+KEEP = 12  # runs kept in the history (a quarter of a year)
+MAX_ITEMS = 40
+
+
+def write(path: Path, data: dict):
+    STATE.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False))
+    os.chmod(tmp, 0o644)
+    tmp.replace(path)
+
+
+def _ts(s: str | None) -> float | None:
+    """'2026-10-23 21:53:07' (server local time, usually UTC) -> Unix time."""
+    if not s:
+        return None
+    try:
+        return time.mktime(time.strptime(s.strip(), "%Y-%m-%d %H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def _clean(v: str | None) -> str | None:
+    v = (v or "").strip()
+    return None if v in ("", "-") else v[:300]
+
+
+def parse_report(text: str) -> dict:
+    """Report (key=value, lists as key[]=...) -> metrics and raw findings."""
+    one: dict[str, str] = {}
+    many: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        if k.endswith("[]"):
+            many.setdefault(k[:-2], []).append(v)
+        else:
+            one[k] = v
+
+    def entries(name: str) -> list[dict]:
+        out = []
+        for raw in many.get(name, []):
+            p = raw.split("|")
+            out.append({"id": p[0].strip(), "text": _clean(p[1] if len(p) > 1 else ""),
+                        "detail": _clean(p[2] if len(p) > 2 else ""), "solution": _clean(p[3] if len(p) > 3 else "")})
+        return out
+
+    details: dict[str, list[dict]] = {}
+    for raw in many.get("details", []):
+        p = raw.split("|")
+        if len(p) < 3:
+            continue
+        fields = dict(kv.split(":", 1) for kv in p[2].split(";") if ":" in kv)
+        details.setdefault(p[0], []).append(fields)
+
+    def num(k: str) -> int | None:
+        try:
+            return int(one.get(k, ""))
+        except ValueError:
+            return None
+
+    return {
+        "startedAt": _ts(one.get("report_datetime_start")), "finishedAt": _ts(one.get("report_datetime_end")),
+        "lynisVersion": one.get("lynis_version") or None, "index": num("hardening_index"),
+        "warnings": entries("warning"), "suggestions": entries("suggestion"), "details": details,
+        "compilers": sorted(set(many.get("compiler_world_executable", []))),
+        "deleted": sorted(set(many.get("deleted_file", []))),
+        "vulnerablePackages": num("vulnerable_packages_found"),
+        "testsDone": len([t for t in one.get("tests_executed", "").split("|") if t]),
+    }
+
+
+def parse_log(text: str) -> dict:
+    """What only the log has: file permissions (FILE-7524) and the service ratings (BOOT-5264)."""
+    perms, services = [], []
+    for m in re.finditer(r"permissions of (?:file|directory) (\S+) are not matching expected value \((\d+) != (\d+)\)", text):
+        perms.append({"path": m.group(1), "is": m.group(2), "want": m.group(3)})
+    block = text.split("Performing test ID BOOT-5264", 1)
+    if len(block) == 2:
+        for m in re.finditer(r"Result: (\S+\.service): ([\d.]+) (UNSAFE|EXPOSED|MEDIUM|OK|PROTECTED)", block[1].split("Performing test ID", 1)[0]):
+            services.append({"unit": m.group(1), "score": float(m.group(2)), "level": m.group(3)})
+    return {"perms": perms, "services": services}
+
+
+def _own_unit(unit: str) -> bool:
+    p = Path("/etc/systemd/system") / unit
+    return p.is_file() and not p.is_symlink()
+
+
+def _item(test: str, sub: str, label: str, detail: str | None = None) -> dict:
+    return {"key": f"{test}:{sub.lower()}", "label": label, "detail": detail}
+
+
+def items_for(test: str, rows: list[dict], rep: dict, log: dict) -> list[dict]:
+    """Sub-findings of a test ID - as fine-grained as exceptions can be justified."""
+    det = rep["details"].get(test, [])
+    if test == "SSH-7408" and det:
+        return [_item(test, d.get("field", "?"), d.get("field", "?"),
+                      f"{d.get('value', '?')} → {d.get('prefval') or 'other value'}") for d in det]
+    if test == "KRNL-6000" and det:
+        return [_item(test, d.get("field", "?"), d.get("field", "?"), f"{d.get('value', '?')} → {d.get('prefval', '?')}")
+                for d in det]
+    if test == "FILE-7524" and log["perms"]:
+        return [_item(test, p["path"], p["path"], f"{p['is']} → {p['want']}") for p in log["perms"]]
+    if test == "BOOT-5264" and log["services"]:
+        # Own units (a real file in /etc/systemd/system, installed by Keepwatch or the admin)
+        # one by one, from MEDIUM up; units from Ubuntu packages as a single sub-finding
+        # (they ship with the package).
+        own = [s for s in log["services"] if _own_unit(s["unit"]) and s["level"] in ("UNSAFE", "EXPOSED", "MEDIUM")]
+        pkg = [s for s in log["services"] if not _own_unit(s["unit"]) and s["level"] in ("UNSAFE", "EXPOSED")]
+        out = [_item(test, s["unit"], s["unit"].removesuffix(".service"), f"{s['score']:.1f} {s['level']}") for s in own]
+        if pkg:
+            out.append(_item(test, "package-units", f"{len(pkg)} services from Ubuntu packages",
+                             ", ".join(s["unit"].removesuffix(".service") for s in pkg)[:300]))
+        return out
+    if test == "HRDN-7222" and rep["compilers"]:
+        return [_item(test, c, c) for c in rep["compilers"]]
+    if test == "LOGG-2190" and rep["deleted"]:
+        return [_item(test, f, f) for f in rep["deleted"]]
+    if len(rows) > 1 or test in ("NETW-3200", "FILE-6310", "AUTH-9286"):
+        out = []
+        for r in rows:
+            t = r["text"] or ""
+            m = (re.search(r"protocol '([^']+)'", t) or re.search(r"place (/\S*) on", t)
+                 or re.search(r"(minimum|maximum) password age", t))
+            sub = m.group(1) if m else re.sub(r"[^a-z0-9]+", "-", (r["detail"] or t).lower()).strip("-")[:40]
+            out.append(_item(test, sub, m.group(1) if m else (r["detail"] or t), r["detail"] if m else None))
+        return out
+    return []
+
+
+def group(rows: list[dict], kind: str, rep: dict, log: dict) -> list[dict]:
+    by: dict[str, list[dict]] = {}
+    for r in rows:
+        by.setdefault(r["id"], []).append(r)
+    out = []
+    for test, rs in by.items():
+        items = items_for(test, rs, rep, log)
+        if len(items) > MAX_ITEMS:
+            items = items[:MAX_ITEMS] + [_item(test, "…", f"and {len(items) - MAX_ITEMS} more")]
+        out.append({"id": test, "kind": kind, "text": rs[0]["text"],
+                    "detail": rs[0]["detail"] if len(rs) == 1 else None,
+                    "solution": rs[0]["solution"], "items": items})
+    return out
+
+
+def build(report_text: str, log_text: str) -> dict:
+    rep = parse_report(report_text)
+    log = parse_log(log_text)
+    return {
+        "startedAt": rep["startedAt"], "finishedAt": rep["finishedAt"], "lynisVersion": rep["lynisVersion"],
+        "index": rep["index"], "tests": rep["testsDone"] or None, "vulnerablePackages": rep["vulnerablePackages"],
+        "warnings": group(rep["warnings"], "warning", rep, log),
+        "suggestions": group(rep["suggestions"], "suggestion", rep, log),
+    }
+
+
+def keys_of(findings: list[dict]) -> dict[str, list[str]]:
+    """Compact form for the history: test ID -> keys of the sub-findings (empty = whole test)."""
+    return {f["id"]: [i["key"] for i in f["items"]] for f in findings}
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) >= 2 and argv[0] == "--parse":
+        rep = Path(argv[1]).read_text(errors="replace")
+        log = Path(argv[2]).read_text(errors="replace") if len(argv) > 2 else ""
+        print(json.dumps(build(rep, log), ensure_ascii=False, indent=2))
+        return 0
+
+    try:
+        prev = json.loads(OUT.read_text())
+    except (OSError, ValueError):
+        prev = {}
+    history = prev.get("history") or []
+    result = {"version": 1, "error": None, "checkedAt": time.time(), "last": prev.get("last"), "history": history}
+
+    lynis = shutil.which("lynis") or "/usr/sbin/lynis"
+    try:
+        if not os.path.exists(lynis):
+            raise RuntimeError("Lynis is not installed (apt install lynis, or re-run the lynis module).")
+        # --cronjob: no colours, no prompts, fast. Quiet (only errors go to the journal);
+        # nice/ionice come from the unit (Nice=15, IOSchedulingClass=idle).
+        p = subprocess.run([lynis, "audit", "system", "--cronjob", "--quick", "--no-colors", "--quiet"],
+                           capture_output=True, text=True, timeout=1800)
+        if p.returncode != 0:
+            tail = (p.stderr or p.stdout).strip().splitlines()
+            raise RuntimeError(f"Lynis exited with {p.returncode}: {(tail[-1] if tail else '')[:200]}")
+        run = build(REPORT.read_text(errors="replace"), LOG.read_text(errors="replace") if LOG.exists() else "")
+        if run["index"] is None:
+            raise RuntimeError("The report has no hardening index - incomplete run?")
+        result["last"] = run
+        entry = {"startedAt": run["startedAt"], "finishedAt": run["finishedAt"], "index": run["index"],
+                 "warnings": keys_of(run["warnings"]), "suggestions": keys_of(run["suggestions"])}
+        result["history"] = [entry] + [h for h in history if h.get("finishedAt") != run["finishedAt"]][:KEEP - 1]
+    except Exception as e:  # noqa: BLE001 - keep the last result, show the error
+        result["error"] = str(e)[:300]
+    write(OUT, result)
+    last = result["last"] or {}
+    print(f"keepwatch-lynis: index {last.get('index')}, {len(last.get('warnings') or [])} warnings, "
+          f"{len(last.get('suggestions') or [])} suggestions, error: {result['error']}")
+    return 0 if not result["error"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

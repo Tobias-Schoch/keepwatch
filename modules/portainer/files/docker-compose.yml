@@ -1,0 +1,36 @@
+# Keepwatch: Portainer CE, the web UI for Docker stacks (deploy from Git,
+# webhooks). Installed as /srv/keepwatch/portainer/docker-compose.yml by the
+# portainer module; the port comes from .env next to it.
+#
+#   cd /srv/keepwatch/portainer && docker compose -p portainer up -d
+#
+# Portainer does not manage itself or the proxy (both run from their own
+# compose files): a tool that restarts the container it runs in breaks off
+# mid-way.
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    restart: unless-stopped
+    # Usually ~30 MB. No health check: the image has neither a shell nor curl.
+    mem_limit: 512m
+    ports:
+      # 127.0.0.1 only: Portainer holds the Docker socket - root on this
+      # machine - and Portainer CE has no two-factor login; on the internet
+      # its password would be the only barrier. Through the tunnel:
+      #   ./keepwatch tunnel   (or ssh -L <port>:127.0.0.1:<port> <server>)
+      - "127.0.0.1:${KW_PORTAINER_PORT:-9002}:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+    networks:
+      # ONLY the private network shared with the proxy (deploy webhooks reach
+      # portainer:9000 through it). Never the shared app network: there EVERY
+      # container could reach portainer:9000 directly - and Portainer is root
+      # through the Docker socket.
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: proxy-portainer

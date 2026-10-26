@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Ban history: keep banning past SSH attackers, on all ports, long after
+fail2ban's own ban has run out.
+
+Sources (whatever exists on this server):
+  - fail2ban's database: every address the SSH jails (sshd, ssh-closed) ever banned
+  - the dashboard's SSH statistics (/var/lib/keepwatch/dashboard/security-days.json):
+    every address that ever failed an SSH login, per day
+
+Never banned:
+  - KW_TRUSTED_IPS, this server's own addresses, private networks and the tailnet
+  - every address that ever logged in successfully (the dashboard's login-ips.json,
+    the SSH journal) and the peers of SSH sessions open right now
+  - every address on an IP allow-list of a proxy host (`allow` lines in Nginx Proxy Manager)
+  - optional: addresses from KW_BANHISTORY_SPARE_COUNTRIES with fewer than
+    KW_BANHISTORY_SPARE_BELOW attempts - e.g. hijacked home connections in your own
+    country, whose address may belong to a real customer today (needs the dashboard's
+    country database)
+
+The ban is an nftables table of its own (`inet keepwatch_ban_history`, prerouting,
+before Docker's NAT and fail2ban), so it also covers 80/443 and ports Docker publishes.
+Replies to connections this server opens itself (apt, Docker Hub, Let's Encrypt ...)
+still get through. Each address stays banned KW_BANHISTORY_DAYS after its LAST attempt
+(an nftables timeout per address) - whoever stays quiet that long has usually changed
+address anyway. When nobody is left, the table disappears.
+
+The list lives in /var/lib/keepwatch/ban-history.json - it is part of the backup and
+comes back with a restore; keepwatch-ban-history.service rebuilds the table on boot.
+
+  keepwatch-ban-history refresh [--dry-run]   rebuild the list from the sources and apply it (daily timer)
+  keepwatch-ban-history apply                 set the table from the stored list (boot)
+  keepwatch-ban-history release <ip>          take one address off the list and out of the table
+  keepwatch-ban-history status                numbers as JSON (for the dashboard)
+"""
+import ipaddress
+import json
+import os
+import re
+import shlex
+import sqlite3
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+STATE = Path("/var/lib/keepwatch")
+LIST = STATE / "ban-history.json"
+DASH = STATE / "dashboard"
+GEO_DB = DASH / "dbip-country-lite.mmdb"
+F2B_DB = Path("/var/lib/fail2ban/fail2ban.sqlite3")
+NPM_DB = Path("/srv/keepwatch/proxy/data/database.sqlite")
+CONF = [Path("/opt/keepwatch/keepwatch.conf.example"), Path("/etc/keepwatch/keepwatch.conf")]
+TABLE = "keepwatch_ban_history"
+SSH_JAILS = ("sshd", "ssh-closed")
+ALWAYS_SPARED = ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]
+
+
+def conf() -> dict:
+    """KEY="value" lines of keepwatch.conf (defaults from the example first)."""
+    out = {}
+    for p in CONF:
+        try:
+            text = p.read_text()
+        except OSError:
+            continue
+        for line in text.splitlines():
+            m = re.match(r'^\s*(KW_[A-Z0-9_]+)=(.*)$', line)
+            if m:
+                try:
+                    v = shlex.split(m.group(2), comments=True)
+                except ValueError:
+                    continue
+                out[m.group(1)] = v[0] if v else ""
+    return out
+
+
+def nft(script: str):
+    subprocess.run(["nft", "-f", "-"], input=script, text=True, check=True)
+
+
+def table_exists() -> bool:
+    return subprocess.run(["nft", "list", "table", "inet", TABLE], capture_output=True).returncode == 0
+
+
+def drop_table():
+    if table_exists():
+        nft(f"delete table inet {TABLE}\n")
+
+
+def load() -> dict | None:
+    try:
+        return json.loads(LIST.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def save(d: dict):
+    STATE.mkdir(parents=True, exist_ok=True)
+    tmp = LIST.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, separators=(",", ":")))
+    os.chmod(tmp, 0o600)
+    tmp.replace(LIST)
+
+
+def read_json(p: Path) -> dict:
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def allow_lists() -> list[str]:
+    """`allow` lines of all proxy hosts (IP allow-lists of your sites)."""
+    if not NPM_DB.exists():
+        return []
+    try:
+        con = sqlite3.connect(f"file:{NPM_DB}?mode=ro", uri=True)
+        rows = con.execute("SELECT advanced_config FROM proxy_host WHERE is_deleted=0").fetchall()
+        con.close()
+    except sqlite3.Error:
+        return []
+    return [m for (adv,) in rows for m in re.findall(r"^\s*allow\s+([^;\s]+)\s*;", adv or "", re.M)]
+
+
+def own_addresses() -> set[str]:
+    r = subprocess.run(["ip", "-o", "addr", "show", "scope", "global"], capture_output=True, text=True)
+    return {line.split()[3].split("/")[0] for line in r.stdout.splitlines() if len(line.split()) > 3}
+
+
+def logins() -> set[str]:
+    """Addresses that logged in successfully: dashboard record, SSH journal, open sessions."""
+    ips = set((read_json(DASH / "login-ips.json").get("ips") or {}).keys())
+    try:
+        r = subprocess.run(["journalctl", "-q", "--no-pager", "-o", "cat", "_SYSTEMD_UNIT=ssh.service",
+                            "--grep", "^Accepted "], capture_output=True, text=True, timeout=120)
+        ips |= set(re.findall(r"^Accepted \S+ for \S+ from (\S+)", r.stdout, re.M))
+    except subprocess.TimeoutExpired:
+        print("journalctl took too long - logins from the journal not considered", file=sys.stderr)
+    r = subprocess.run(["ss", "-Htnp", "state", "established"], capture_output=True, text=True)
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if '"sshd' in line and len(parts) > 3:
+            peer = parts[3].rsplit(":", 1)[0].strip("[]")
+            ips.add(peer.removeprefix("::ffff:"))
+    return ips
+
+
+def attempts() -> tuple[dict[str, int], dict[str, float]]:
+    """Address -> number of attempts, address -> time of the last attempt."""
+    count: dict[str, int] = {}
+    last: dict[str, float] = {}
+
+    def add(ip: str, n: int, t: float):
+        count[ip] = count.get(ip, 0) + n
+        last[ip] = max(last.get(ip, 0.0), t)
+
+    days = read_json(DASH / "security-days.json").get("days") or {}
+    for day, e in days.items():
+        try:
+            end_of_day = time.mktime(time.strptime(day, "%Y-%m-%d")) + 86400
+        except ValueError:
+            continue
+        for ip, n in (e.get("ips") or {}).items():
+            add(ip, int(n), end_of_day)
+    if F2B_DB.exists():
+        try:
+            con = sqlite3.connect(f"file:{F2B_DB}?mode=ro", uri=True)
+            q = f"SELECT ip, COUNT(*), MAX(timeofban) FROM bans WHERE jail IN ({','.join('?' * len(SSH_JAILS))}) GROUP BY ip"
+            for ip, n, t in con.execute(q, SSH_JAILS):
+                # Already counted per day by the dashboard: then only the time matters.
+                add(ip, 0 if ip in count else int(n), float(t or 0))
+            con.close()
+        except sqlite3.Error as e:
+            print(f"fail2ban database not readable: {e}", file=sys.stderr)
+    return count, last
+
+
+def refresh(dry_run: bool):
+    c = conf()
+    days = max(1, int(c.get("KW_BANHISTORY_DAYS") or 60))
+    spare_countries = set((c.get("KW_BANHISTORY_SPARE_COUNTRIES") or "").upper().split())
+    spare_below = int(c.get("KW_BANHISTORY_SPARE_BELOW") or 100)
+    trusted = (c.get("KW_TRUSTED_IPS") or "").split()
+
+    count, last = attempts()
+    own = logins() | own_addresses()
+    networks = []
+    for n in ALWAYS_SPARED + trusted + allow_lists():
+        try:
+            networks.append(ipaddress.ip_network(n, strict=False))
+        except ValueError:
+            pass
+    geo = None
+    if spare_countries:
+        try:
+            import maxminddb  # python3-maxminddb
+            geo = maxminddb.open_database(str(GEO_DB))
+        except (ImportError, OSError, ValueError):
+            print(f"KW_BANHISTORY_SPARE_COUNTRIES needs {GEO_DB} (dashboard module) and python3-maxminddb - "
+                  "no country is spared", file=sys.stderr)
+    old = load() or {}
+    released = {r["ip"]: r["t"] for r in old.get("released") or []}
+
+    skipped = {"spared": 0, "ownLogins": 0, "networks": 0, "private": 0, "invalid": 0, "expired": 0, "released": 0}
+    now = int(time.time())
+    ips: dict[str, int] = {}
+    for ip, n in sorted(count.items(), key=lambda kv: -kv[1]):
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            skipped["invalid"] += 1
+            continue
+        if not a.is_global:
+            skipped["private"] += 1
+        elif ip in own or str(a) in own:
+            skipped["ownLogins"] += 1
+        elif any(a.version == net.version and a in net for net in networks):
+            skipped["networks"] += 1
+        elif ip in released and last[ip] <= released[ip]:
+            skipped["released"] += 1  # released by hand and quiet since
+        elif geo and n < spare_below and ((geo.get(ip) or {}).get("country") or {}).get("iso_code") in spare_countries:
+            skipped["spared"] += 1
+        else:
+            until = int(last[ip]) + days * 86400
+            if until <= now:
+                skipped["expired"] += 1
+            else:
+                ips[str(a)] = until
+    d = {"v": 1, "builtAt": now, "source": len(count), "skipped": skipped, "days": days,
+         "spareCountries": sorted(spare_countries), "spareBelow": spare_below,
+         "ips": ips, "released": old.get("released") or []}
+    print(json.dumps({"source": d["source"], "skipped": skipped, "banned": len(ips)}))
+    if dry_run:
+        return
+    save(d)
+    apply()
+
+
+def active(d: dict | None) -> dict[str, int]:
+    """Address -> banned until (only bans still running)."""
+    now = time.time()
+    return {ip: until for ip, until in ((d or {}).get("ips") or {}).items() if until > now}
+
+
+def apply():
+    ips = active(load())
+    if not ips:
+        drop_table()
+        return
+    now = int(time.time())
+
+    def element_set(name, kind, version):
+        el = [f"{ip} timeout {until - now}s" for ip, until in ips.items() if ipaddress.ip_address(ip).version == version]
+        el = f"; elements = {{ {', '.join(el)} }}" if el else ""
+        return f"  set {name} {{ type {kind}; flags timeout;{el} }}\n"
+    # "table ...; delete table ...; table {...}" replaces the table in one
+    # atomic transaction - there is no moment without the bans.
+    script = (f"table inet {TABLE}\ndelete table inet {TABLE}\n"
+              f"table inet {TABLE} {{\n"
+              + element_set("v4", "ipv4_addr", 4) + element_set("v6", "ipv6_addr", 6) +
+              "  chain prerouting {\n"
+              # after conntrack (-200), before Docker's NAT (-100) and fail2ban (-150)
+              "    type filter hook prerouting priority -160; policy accept;\n"
+              "    ct state established,related accept\n"
+              "    ip saddr @v4 counter drop\n"
+              "    ip6 saddr @v6 counter drop\n"
+              "  }\n}\n")
+    nft(script)
+
+
+def release(ip: str):
+    a = ipaddress.ip_address(ip)
+    d = load()
+    if not d:
+        sys.exit("No ban history yet.")
+    if str(a) not in d.get("ips", {}):
+        sys.exit(f"{a} is not in the ban history.")
+    del d["ips"][str(a)]
+    d.setdefault("released", []).append({"ip": str(a), "t": int(time.time())})
+    save(d)
+    if table_exists():
+        key = "v4" if a.version == 4 else "v6"
+        subprocess.run(["nft", "delete", "element", "inet", TABLE, key, f"{{ {a} }}"], check=False)
+    print(f"{a} released.")
+
+
+def status():
+    d = load()
+    out = {"active": table_exists(), "banned": 0, "until": None, "builtAt": None, "dropped": 0}
+    if d:
+        ips = active(d)
+        out.update(banned=len(ips), until=max(ips.values()) if ips else None, builtAt=d.get("builtAt"),
+                   days=d.get("days"), source=d.get("source"), skipped=d.get("skipped"),
+                   spareCountries=d.get("spareCountries"), spareBelow=d.get("spareBelow"),
+                   released=len(d.get("released") or []))
+    if out["active"]:
+        r = subprocess.run(["nft", "-j", "list", "chain", "inet", TABLE, "prerouting"], capture_output=True, text=True)
+        try:
+            for item in json.loads(r.stdout)["nftables"]:
+                for e in (item.get("rule") or {}).get("expr", []):
+                    if "counter" in e:
+                        out["dropped"] += e["counter"]["packets"]
+        except (ValueError, KeyError):
+            pass
+    print(json.dumps(out))
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "refresh":
+        refresh("--dry-run" in sys.argv)
+    elif cmd == "apply":
+        apply()
+    elif cmd == "release" and len(sys.argv) == 3:
+        release(sys.argv[2])
+    elif cmd == "status":
+        status()
+    else:
+        sys.exit(__doc__)

@@ -1,0 +1,71 @@
+/* ---- Live logs (logs/LogView.tsx) ------------------------------------------------------------- */
+html[data-design^="obsidian"] .o-overlay.is-top:has(.d-logs-sheet) { padding-top: 4vh; }
+html[data-design^="obsidian"] .o-dialog.d-logs-sheet { max-width: 1140px; height: calc(100vh - 8vh); max-height: calc(100vh - 8vh); }
+html[data-design^="obsidian"] .d-logs-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: 14px; }
+html[data-design^="obsidian"] .d-logs-body > .d-lv { flex: 1; min-height: 0; }
+html[data-design^="obsidian"] .d-logs-body .d-lv-box { flex: 1; height: auto; min-height: 160px; }
+
+html[data-design^="obsidian"] .d-lv { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+html[data-design^="obsidian"] .d-lv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
+html[data-design^="obsidian"] .d-lv-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-right: 6px; }
+html[data-design^="obsidian"] .d-lv-chips .o-chip { height: 30px; }
+
+html[data-design^="obsidian"] .d-lv-live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--o-ok); }
+html[data-design^="obsidian"] .d-lv-live i { width: 8px; height: 8px; border-radius: 99px; background: currentColor; box-shadow: 0 0 0 4px rgba(143, 207, 176, 0.15); animation: d-lv-pulse 1.8s ease-in-out infinite; }
+html[data-design^="obsidian"] .d-lv-live[data-state="paused"],
+html[data-design^="obsidian"] .d-lv-live[data-state="scroll"] { color: var(--o-sand); }
+html[data-design^="obsidian"] .d-lv-live[data-state="paused"] i,
+html[data-design^="obsidian"] .d-lv-live[data-state="scroll"] i { box-shadow: 0 0 0 4px rgba(216, 193, 142, 0.14); animation: none; }
+html[data-design^="obsidian"] .d-lv-live[data-state="suspended"] { color: var(--o-mute); }
+html[data-design^="obsidian"] .d-lv-live[data-state="suspended"] i { box-shadow: none; animation: none; }
+@keyframes d-lv-pulse { 50% { box-shadow: 0 0 0 6px rgba(143, 207, 176, 0.05); } }
+
+html[data-design^="obsidian"] .d-lv-search { flex: 1 1 260px; min-width: 0; height: 38px !important; width: auto !important; gap: 8px; }
+html[data-design^="obsidian"] .d-lv-hits { flex-shrink: 0; font: 500 12px/1 var(--o-mono); color: var(--o-mute); font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .d-lv-count {
+  height: 28px; padding: 0 11px; border-radius: 99px; font-size: 12.5px; white-space: nowrap;
+  color: var(--o-dim); box-shadow: inset 0 0 0 1px var(--o-line-2); transition: background 0.2s;
+}
+html[data-design^="obsidian"] .d-lv-count[data-tone="rose"]:not(:disabled) { color: rgb(240 170 180); box-shadow: inset 0 0 0 1px rgba(234, 140, 152, 0.5); }
+html[data-design^="obsidian"] .d-lv-count[data-tone="sand"]:not(:disabled) { color: rgb(226 206 160); box-shadow: inset 0 0 0 1px rgba(216, 193, 142, 0.5); }
+html[data-design^="obsidian"] .d-lv-count:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+html[data-design^="obsidian"] .d-lv-count:disabled { cursor: default; opacity: 0.6; }
+html[data-design^="obsidian"] .d-lv-dim { font-size: 12.5px; color: var(--o-mute); }
+
+html[data-design^="obsidian"] .d-lv-box {
+  height: 420px; overflow: auto; overscroll-behavior: contain;
+  padding: 12px 0; border-radius: 14px;
+  font: 12.5px/1.7 var(--o-mono); color: #d8d8e0;
+  background: rgba(0, 0, 0, 0.42); box-shadow: inset 0 0 0 1px var(--o-line-2), inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+html[data-design^="obsidian"] .d-lv-box:focus-visible { outline-offset: -2px; }
+html[data-design^="obsidian"] .d-lv-box.is-short { height: min(40vh, 360px); }
+html[data-design^="obsidian"] .d-lv-empty { padding: 20px 16px; color: var(--o-mute); font-family: var(--o-sans); font-size: 13px; }
+
+html[data-design^="obsidian"] .d-ll {
+  display: flex; gap: 14px; padding: 0 16px; white-space: pre-wrap; word-break: break-word;
+  content-visibility: auto; contain-intrinsic-size: auto 21px;
+}
+html[data-design^="obsidian"] .d-ll:hover { background: rgba(255, 255, 255, 0.03); }
+html[data-design^="obsidian"] .d-ll time { flex: none; color: #8e8e99; font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .d-ll-c { flex: none; width: var(--lv-cw, 9ch); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b3b3ff; }
+html[data-design^="obsidian"] .d-ll-m { min-width: 0; }
+html[data-design^="obsidian"] .d-ll.is-err { background: rgba(234, 140, 152, 0.08); }
+html[data-design^="obsidian"] .d-ll.is-err .d-ll-m { color: rgb(240 170 180); }
+html[data-design^="obsidian"] .d-ll.is-warn .d-ll-m { color: rgb(226 206 160); }
+html[data-design^="obsidian"] .d-ll.is-gap { color: var(--o-sand); font-style: italic; background: rgba(216, 193, 142, 0.05); }
+html[data-design^="obsidian"] .d-ll.is-hit { background: rgb(var(--o-acc) / 0.1); box-shadow: inset 2px 0 0 rgb(var(--o-acc)); }
+html[data-design^="obsidian"] .d-ll mark { background: rgb(var(--o-acc) / 0.28); color: #fff; border-radius: 3px; padding: 0 1px; }
+
+html[data-design^="obsidian"] .d-lv-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--o-mute); }
+html[data-design^="obsidian"] .d-lv-notes { display: grid; gap: 4px; font-size: 12.5px; color: var(--o-mute); }
+html[data-design^="obsidian"] .d-lv-notes p { margin: 0; }
+
+@media (max-width: 760px) {
+  html[data-design^="obsidian"] .d-ll { gap: 10px; padding: 0 12px; }
+  html[data-design^="obsidian"] .d-ll-c { width: min(var(--lv-cw, 9ch), 7ch); }
+  html[data-design^="obsidian"] .d-lv-box { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-design^="obsidian"] .d-lv-live i { animation: none; }
+}

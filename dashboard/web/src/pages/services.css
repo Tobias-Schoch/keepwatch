@@ -1,0 +1,89 @@
+/* Services page (Services.tsx, Sites.tsx, Updates.tsx → Maintenance). svc-* only. */
+
+html[data-design^="obsidian"] .svc-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* Collapsed: one row per service. */
+html[data-design^="obsidian"] .o-panel.d-block.svc-block { padding: 10px 24px; }
+html[data-design^="obsidian"] .o-panel.d-block.svc-block.is-open { padding-bottom: 16px; }
+html[data-design^="obsidian"] .d-block-head.svc-head { margin-bottom: 0; cursor: pointer; user-select: none; }
+html[data-design^="obsidian"] .svc-head a, html[data-design^="obsidian"] .svc-head button { user-select: auto; }
+html[data-design^="obsidian"] .svc-toggle { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: 0 -6px 0 -6px; border-radius: 6px; color: var(--o-faint); transition: color 0.2s; }
+html[data-design^="obsidian"] .svc-head:hover .svc-toggle { color: var(--o-dim); }
+html[data-design^="obsidian"] .svc-toggle:focus-visible { outline: 2px solid rgb(var(--o-acc) / 0.5); outline-offset: 1px; }
+html[data-design^="obsidian"] .svc-head .d-block-title { min-width: 120px; }
+
+html[data-design^="obsidian"] .svc-sites { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px; min-width: 0; font-size: 13px; }
+html[data-design^="obsidian"] .svc-site a { color: var(--o-mute); transition: color 0.2s; }
+html[data-design^="obsidian"] .svc-site a:hover { color: var(--o-text); text-decoration: underline; text-underline-offset: 3px; }
+html[data-design^="obsidian"] .svc-site.is-off a { color: var(--o-faint); text-decoration: line-through; }
+html[data-design^="obsidian"] .svc-issue { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: var(--o-mute); }
+html[data-design^="obsidian"] .svc-issue[data-tone="rose"] { color: var(--o-rose); }
+html[data-design^="obsidian"] .svc-issue[data-tone="sand"] { color: var(--o-sand); }
+html[data-design^="obsidian"] .svc-issue[data-tone="ok"] { color: var(--o-ok); }
+
+/* Expanded: meta row, then sites, images, containers as quiet rows without column headers. */
+html[data-design^="obsidian"] .svc-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--o-line); }
+html[data-design^="obsidian"] .svc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 4px; font-size: 12.5px; color: var(--o-mute); }
+html[data-design^="obsidian"] .svc-meta-bits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0; }
+html[data-design^="obsidian"] .svc-meta-act { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+html[data-design^="obsidian"] .svc-rows { display: flex; flex-direction: column; }
+html[data-design^="obsidian"] .svc-rows + .svc-rows { margin-top: 14px; }
+html[data-design^="obsidian"] .svc-meta + .svc-rows { margin-top: 6px; }
+html[data-design^="obsidian"] .svc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--o-line); font-size: 13.5px; text-align: left; }
+html[data-design^="obsidian"] .svc-row-btn { margin: 0 -10px; padding-left: 10px; padding-right: 10px; width: calc(100% + 20px); border-radius: 8px; transition: background 0.15s; }
+html[data-design^="obsidian"] .svc-row-btn:hover { background: rgba(255, 255, 255, 0.025); }
+html[data-design^="obsidian"] .svc-row-btn:focus-visible { outline: 2px solid rgb(var(--o-acc) / 0.5); outline-offset: -2px; }
+html[data-design^="obsidian"] .svc-row-main { display: flex; flex: 1 1 260px; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+html[data-design^="obsidian"] .svc-row-main > .svc-issue, html[data-design^="obsidian"] .svc-row-main > .sg-score-btn, html[data-design^="obsidian"] .svc-row-main > .d-renew { margin-left: 0; }
+html[data-design^="obsidian"] .svc-row-name { color: var(--o-text); overflow-wrap: anywhere; }
+html[data-design^="obsidian"] .svc-row-name.d-mono { font-size: 12.5px; color: var(--o-dim); }
+html[data-design^="obsidian"] .svc-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+html[data-design^="obsidian"] .svc-row-side { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 16px; margin-left: auto; }
+html[data-design^="obsidian"] .svc-num { font: 12px/1 var(--o-mono); color: var(--o-mute); white-space: nowrap; }
+html[data-design^="obsidian"] .svc-row .up-strip-btn { margin-top: 0; }
+html[data-design^="obsidian"] .svc-row .d-renew { align-self: center; }
+html[data-design^="obsidian"] .svc-row-panel { padding: 0 0 6px; }
+html[data-design^="obsidian"] .svc-access { display: inline-flex; align-items: center; gap: 5px; min-width: 52px; justify-content: flex-end; font-size: 12.5px; color: var(--o-faint); white-space: nowrap; border-radius: 6px; transition: color 0.2s; }
+html[data-design^="obsidian"] .svc-access[data-on] { color: rgb(var(--o-acc)); }
+html[data-design^="obsidian"] .svc-access:hover { color: var(--o-text); }
+html[data-design^="obsidian"] .svc-access:focus-visible { outline: 2px solid rgb(var(--o-acc) / 0.5); outline-offset: 2px; }
+
+/* Images: version, update, vulnerabilities */
+html[data-design^="obsidian"] .svc-ver { font-size: 13.5px; font-weight: 600; color: var(--o-sand); font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .svc-ver.is-major { color: var(--o-dim); }
+html[data-design^="obsidian"] .svc-vuln { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; color: var(--o-mute); border-radius: 6px; }
+html[data-design^="obsidian"] .svc-vuln [data-tone="rose"] { color: var(--o-rose); }
+html[data-design^="obsidian"] .svc-vuln [data-tone="sand"] { color: var(--o-sand); }
+html[data-design^="obsidian"] .svc-vuln svg { align-self: center; color: var(--o-faint); }
+html[data-design^="obsidian"] .svc-vuln:hover:not(:disabled) svg { color: var(--o-text); }
+html[data-design^="obsidian"] .svc-vuln:focus-visible { outline: 2px solid rgb(var(--o-acc) / 0.5); outline-offset: 2px; }
+html[data-design^="obsidian"] .svc-img .d-vuln-list { margin: 2px 0 6px; }
+html[data-design^="obsidian"] .svc-row:hover .d-renew { opacity: 1; }
+
+/* Maintenance */
+html[data-design^="obsidian"] .svc-maint-body { margin-top: 6px; }
+html[data-design^="obsidian"] .svc-maint-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-height: 44px; padding: 6px 0; border-top: 1px solid var(--o-line); font-size: 13.5px; }
+html[data-design^="obsidian"] .svc-maint-label { width: 150px; flex-shrink: 0; color: var(--o-text); }
+html[data-design^="obsidian"] .svc-maint-state { display: inline-flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; font-size: 13px; }
+html[data-design^="obsidian"] .svc-maint-picks { padding-left: 162px; }
+html[data-design^="obsidian"] .svc-maint-picks .d-clean-row { padding: 7px 0; font-size: 13px; }
+
+@media (max-width: 640px) {
+  html[data-design^="obsidian"] .svc-head .d-block-title { min-width: 0; }
+  html[data-design^="obsidian"] .svc-maint-label { width: auto; flex: 1 0 100%; }
+  html[data-design^="obsidian"] .svc-maint-picks { padding-left: 0; }
+}
+@media (max-width: 640px) {
+  html[data-design^="obsidian"] .o-panel.d-block.svc-block { padding: 10px 16px; }
+}
+
+/* Header: sites and hints. Wide: same row; narrow: a second row. */
+html[data-design^="obsidian"] .svc-info { display: contents; }
+@media (max-width: 640px) {
+  html[data-design^="obsidian"] .svc-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; flex-basis: 100%; order: 5; padding-left: 40px; }
+  html[data-design^="obsidian"] .svc-row-main { flex-basis: 100%; }
+  html[data-design^="obsidian"] .svc-row-btn .svc-row-main { flex-basis: auto; }
+  html[data-design^="obsidian"] .svc-row-side { justify-content: flex-start; margin-left: 0; }
+  html[data-design^="obsidian"] .svc-row .up-strip i:nth-of-type(-n+60) { display: none; }
+}

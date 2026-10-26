@@ -1,0 +1,7 @@
+# Keepwatch settings for Lynis. Installed as /etc/lynis/custom.prf (Lynis reads it
+# next to default.prf on its own). Exceptions do NOT go here; they live, each
+# with its reason, in /etc/keepwatch/lynis-exceptions.conf (why: see there).
+
+# No version check against CISOfy (a DNS query on every run): Lynis comes from
+# the Ubuntu package and is kept current by the package updates.
+skip-upgrade-test=yes

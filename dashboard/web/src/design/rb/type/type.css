@@ -1,0 +1,154 @@
+/* Obsidian · type and edges after React Bits: FoldText, CurvedLoop, GradualBlur.
+   This file loads BEFORE obsidian.css — hence deliberately more specific selectors. */
+
+/* ---- FoldText --------------------------------------------------------------------------- */
+html[data-design^="obsidian"] .o-fold .o-fold-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+html[data-design^="obsidian"] .o-fold .o-fold-word { position: relative; display: inline-block; white-space: nowrap; }
+html[data-design^="obsidian"] .o-fold .o-fold-seg {
+  display: inline-block;
+  perspective: 720px;
+  transform-style: preserve-3d;
+}
+html[data-design^="obsidian"] .o-fold .o-fold-piece.o-fold-piece {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+  transform-origin: 50% 0%;
+  backface-visibility: hidden;
+  animation: obsidian-fold-in var(--dur, 720ms) cubic-bezier(0.215, 0.61, 0.355, 1) var(--d, 0ms) backwards;
+}
+/* Crease shadow: dark at the fold, disappears once the letter has settled. */
+html[data-design^="obsidian"] .o-fold .o-fold-piece::after {
+  content: "";
+  position: absolute;
+  inset: -0.04em -0.02em 0.08em;
+  pointer-events: none;
+  border-radius: 0.08em;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.2) 45%, rgb(var(--o-acc-hi) / 0.22));
+  mix-blend-mode: multiply;
+  opacity: 0;
+  animation: obsidian-fold-crease var(--dur, 720ms) cubic-bezier(0.215, 0.61, 0.355, 1) var(--d, 0ms) backwards;
+}
+/* Shimmer across the whole word, even though every letter is its own element. */
+html[data-design^="obsidian"] .o-fold .o-fold-piece.is-shine {
+  background-image: linear-gradient(105deg, var(--o-silver-dim) 0%, var(--o-silver-dim) 38%, var(--o-hi) 47%, var(--o-acc-1) 51%, var(--o-silver-dim) 60%, var(--o-silver-dim) 100%);
+  background-size: calc(var(--fw, 4em) * 2.6) 100%;
+  background-repeat: no-repeat;
+  background-position: calc(-1 * var(--fx, 0px) - 1.6 * var(--fw, 4em)) 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: obsidian-fold-in var(--dur, 720ms) cubic-bezier(0.215, 0.61, 0.355, 1) var(--d, 0ms) backwards;
+}
+/* One pass of the shimmer; useSweep (sweep.ts) sets data-sweep every 7 s. */
+html[data-design^="obsidian"] .o-fold[data-sweep] .o-fold-piece.is-shine {
+  animation:
+    obsidian-fold-in var(--dur, 720ms) cubic-bezier(0.215, 0.61, 0.355, 1) var(--d, 0ms) backwards,
+    obsidian-fold-sweep 3.15s linear forwards;
+}
+/* All letters settled: drop the 3D helpers so no letter keeps its own compositing layer. */
+html[data-design^="obsidian"] .o-fold[data-folded] .o-fold-seg { perspective: none; transform-style: flat; }
+html[data-design^="obsidian"] .o-fold[data-folded] .o-fold-piece.o-fold-piece { backface-visibility: visible; }
+html[data-design^="obsidian"] .o-fold[data-folded] .o-fold-piece::after { display: none; }
+@keyframes obsidian-fold-in {
+  0% { opacity: 0; transform: rotateX(-92deg); }
+  35% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes obsidian-fold-crease {
+  0% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+@keyframes obsidian-fold-sweep {
+  from { background-position: calc(-1 * var(--fx, 0px) - 1.6 * var(--fw, 4em)) 0; }
+  to { background-position: calc(-1 * var(--fx, 0px)) 0; }
+}
+
+/* ---- CurvedLoop -------------------------------------------------------------------------- */
+html[data-design^="obsidian"] .o-loop {
+  position: relative;
+  width: 100%;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Fade the edges softly at the curve ends too */
+  -webkit-mask: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+html[data-design^="obsidian"] .o-loop[data-drag] { cursor: grabbing; }
+html[data-design^="obsidian"] .o-loop-svg { display: block; width: 100%; height: auto; overflow: visible; }
+html[data-design^="obsidian"] .o-loop-text {
+  font-family: var(--o-sans);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+html[data-design^="obsidian"] .o-loop-stop-edge { stop-color: var(--o-silver-dim); stop-opacity: 0.03; }
+html[data-design^="obsidian"] .o-loop-stop-mid { stop-color: var(--o-silver); stop-opacity: 0.13; }
+html[data-design^="obsidian"] .o-loop-stop-hi { stop-color: var(--o-hi); stop-opacity: 0.24; }
+
+/* Access: full-width band at the bottom, behind the card. */
+html[data-design^="obsidian"] .o-gate-loop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2vh;
+  z-index: 0;
+  opacity: 0;
+  animation: obsidian-loop-in 1.6s var(--o-ease) 0.7s both;
+}
+/* Overview: calm ending, edge to edge across the window. */
+html[data-design^="obsidian"] .o-dash-loop {
+  width: 100vw;
+  margin: 88px 0 0 calc(50% - 50vw);
+  opacity: 0;
+  animation: obsidian-loop-in 1.4s var(--o-ease) 0.3s both;
+}
+@keyframes obsidian-loop-in {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- GradualBlur --------------------------------------------------------------------------- */
+html[data-design^="obsidian"] .o-gblur {
+  position: fixed;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  isolation: isolate;
+}
+html[data-design^="obsidian"] .o-gblur > div { position: absolute; inset: 0; }
+html[data-design^="obsidian"] .o-gblur[data-pos="top"] { top: 0; z-index: 39; }
+html[data-design^="obsidian"] .o-gblur[data-pos="bottom"] { bottom: 0; z-index: 30; }
+/* Light veil towards the edge so the header and dock stay readable. */
+html[data-design^="obsidian"] .o-gblur-tint { position: absolute; inset: 0; }
+html[data-design^="obsidian"] .o-gblur[data-pos="top"] .o-gblur-tint {
+  background: linear-gradient(180deg, rgb(var(--o-bg-rgb) / 0.72), rgb(var(--o-bg-rgb) / 0.38) 45%, transparent);
+}
+html[data-design^="obsidian"] .o-gblur[data-pos="bottom"] .o-gblur-tint {
+  background: linear-gradient(0deg, rgb(var(--o-bg-rgb) / 0.5), rgb(var(--o-bg-rgb) / 0.14) 50%, transparent);
+}
+/* GradualBlur now takes over the old header blur. */
+html[data-design^="obsidian"] header.o-top.o-top::before { display: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-design^="obsidian"] .o-gblur > div { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-design^="obsidian"] .o-fold .o-fold-piece.o-fold-piece { animation: obsidian-fade 0.4s ease both; transform: none; }
+  html[data-design^="obsidian"] .o-fold .o-fold-piece.is-shine { animation: obsidian-fade 0.4s ease both; background-position: calc(-1 * var(--fx, 0px) - 0.8 * var(--fw, 4em)) 0; }
+  html[data-design^="obsidian"] .o-fold .o-fold-piece::after { display: none; }
+  html[data-design^="obsidian"] .o-gate-loop, html[data-design^="obsidian"] .o-dash-loop { animation: obsidian-fade 0.4s ease both; }
+}
+@media (max-width: 720px) {
+  html[data-design^="obsidian"] .o-dash-loop { margin-top: 56px; }
+}

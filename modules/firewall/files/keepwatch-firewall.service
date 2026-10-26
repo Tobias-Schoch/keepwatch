@@ -1,0 +1,19 @@
+[Unit]
+Description=Keepwatch firewall: allow-list for connections from the internet (IPv4 + IPv6)
+After=network-online.target
+Wants=network-online.target
+# The lines below are removed by the firewall module when Docker is not in use.
+After=docker.service
+Requires=docker.service
+# When Docker restarts (e.g. through an update), this service runs again.
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/keepwatch-firewall
+
+[Install]
+WantedBy=multi-user.target
+# docker: also started whenever Docker starts
+WantedBy=docker.service

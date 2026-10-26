@@ -1,0 +1,34 @@
+[Unit]
+Description=Keepwatch dashboard (127.0.0.1 only, reached through the SSH tunnel)
+After=network-online.target docker.service fail2ban.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 @KW_ROOT@/dashboard/server/dashboard.py
+Environment=KW_CONF=/etc/keepwatch/keepwatch.conf
+Environment=DASHBOARD_PORT=@PORT@
+Environment=DASHBOARD_WEB=@KW_ROOT@/dashboard/web/dist
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+# Reads fail2ban, the journal, Docker, restic - needs root. It manages the
+# server: it writes to /etc (update timers, fail2ban, backup, firewall),
+# /srv/keepwatch and /var/backups/keepwatch and runs docker, systemctl, nft,
+# tailscale and restic. Hardened is everything that touches none of that
+# (Lynis BOOT-5264; the rest is explained in the Lynis exceptions).
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

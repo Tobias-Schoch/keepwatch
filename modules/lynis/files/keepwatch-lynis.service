@@ -1,0 +1,12 @@
+[Unit]
+Description=Keepwatch hardening audit with Lynis (read-only, result for the dashboard)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-lynis
+# Quietly in the background. Deliberately without a sandbox (ProtectSystem, PrivateTmp ...):
+# Lynis should see the system as it really is - otherwise it would rate the sandbox.
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=45min

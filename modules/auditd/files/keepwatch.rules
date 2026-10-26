@@ -1,0 +1,16 @@
+## Keepwatch audit rules (auditd module). Query: ausearch -k <key>, e.g. ausearch -k ssh
+## Writes to the files that decide who gets in and what runs as root.
+-w /etc/ssh/ -p wa -k ssh
+-w /root/.ssh/ -p wa -k ssh
+-w /etc/sudoers -p wa -k sudo
+-w /etc/sudoers.d/ -p wa -k sudo
+-w /etc/passwd -p wa -k accounts
+-w /etc/shadow -p wa -k accounts
+-w /etc/group -p wa -k accounts
+-w /etc/systemd/system/ -p wa -k services
+-w /etc/cron.d/ -p wa -k cron
+-w /var/spool/cron/ -p wa -k cron
+-w /etc/fail2ban/ -p wa -k fail2ban
+-w /etc/keepwatch/ -p wa -k keepwatch
+-w /usr/local/sbin/keepwatch-firewall -p wa -k firewall
+-w /etc/docker/ -p wa -k docker

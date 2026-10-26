@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+"""fail2ban ignorecommand of the sshd-tailscale jail: exit 0 = ignore this address.
+
+Everything that does NOT come from the Tailscale network is ignored - those
+addresses are handled by the much stricter sshd jail.
+"""
+import ipaddress
+import sys
+
+TAILSCALE = [ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48")]
+try:
+    ip = ipaddress.ip_address(sys.argv[1])
+except (IndexError, ValueError):
+    sys.exit(0)
+sys.exit(1 if any(ip.version == n.version and ip in n for n in TAILSCALE) else 0)

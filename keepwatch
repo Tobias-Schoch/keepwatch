@@ -1,0 +1,99 @@
+#!/bin/bash
+# Keepwatch - a hardened server and a dashboard to keep watch over it.
+# Runs on your computer (macOS or Linux); the server only ever receives files and commands over SSH.
+set -euo pipefail
+ROOT=$(cd "$(dirname "$0")" && pwd)
+LIB=$ROOT/lib
+
+usage() {
+  cat <<'EOF'
+Usage: ./keepwatch <command>
+
+  setup                      answer a few questions, writes keepwatch.conf
+  deploy [--dry-run] [--only a,b]
+                             bring the server in line with keepwatch.conf
+  deploy --fresh             new server: set up, restore from backup, set up again
+  modules                    list modules and whether they are on
+  enable <module>...         switch modules on (with what they need), then deploy
+  disable <module>...        switch modules off (and what needs them), then deploy
+
+  tunnel                     dashboard and admin UIs on your computer (SSH tunnel)
+  check                      what is open from the internet, and is the server healthy
+  ssh [command]              shell (or one command) on the server, as root
+  backup now                 run a backup right away
+  backup pull <folder> [--thorough]
+                             independent copy of the backup on this computer
+  restore [--test]           restore the server from its backup (--test changes nothing)
+  desktop [--build-only]     build and install the macOS app, write its config
+
+Configuration: keepwatch.conf (every setting is explained in there).
+EOF
+}
+
+need_conf() {
+  [[ -f $ROOT/keepwatch.conf ]] || { echo "No keepwatch.conf yet - run ./keepwatch setup first." >&2; exit 1; }
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/keepwatch.conf.example"
+  # shellcheck disable=SC1091
+  source "$ROOT/keepwatch.conf"
+  set +a
+  TARGET="$KW_SSH_USER@$KW_HOST"
+  # SetEnv: macOS sends LC_CTYPE=UTF-8, which Linux does not know (perl/apt warn on every call).
+  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o SetEnv=LC_ALL=C.UTF-8 -p "$KW_SSH_PORT")
+  if [[ $KW_SSH_USER == root ]]; then SUDO=""; else SUDO="sudo -n"; fi
+}
+
+# shellcheck disable=SC2029 # the command is meant to run on the server
+remote() { ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
+remote_tty() { ssh -t "${SSH_OPTS[@]}" "$TARGET" "$@"; }
+on() { [[ " $KW_MODULES " == *" $1 "* ]]; }
+
+cmd=${1:-}
+[[ $# -gt 0 ]] && shift
+case $cmd in
+  setup)
+    exec python3 "$LIB/wizard.py" "$@" ;;
+  modules)
+    exec python3 "$LIB/kwconf.py" modules ;;
+  enable|disable)
+    exec python3 "$LIB/kwconf.py" "$cmd" "$@" ;;
+  deploy)
+    need_conf
+    # shellcheck source=lib/deploy.sh
+    source "$LIB/deploy.sh" ;;
+  tunnel)
+    need_conf
+    # shellcheck source=lib/tunnel.sh
+    source "$LIB/tunnel.sh" ;;
+  check)
+    need_conf
+    # shellcheck source=lib/check.sh
+    source "$LIB/check.sh" ;;
+  ssh)
+    need_conf
+    if (( $# )); then remote "$SUDO $*"; else remote_tty ${SUDO:+sudo -i}; fi ;;
+  backup)
+    need_conf
+    case ${1:-} in
+      now) remote_tty "$SUDO systemctl start --wait keepwatch-backup.service; $SUDO journalctl -u keepwatch-backup -n 30 --no-pager -o cat" ;;
+      pull) shift; exec "$LIB/backup-pull.sh" "$@" ;;
+      *) echo "usage: ./keepwatch backup now | pull <folder> [--thorough]" >&2; exit 2 ;;
+    esac ;;
+  restore)
+    need_conf
+    remote_tty "$SUDO bash /opt/keepwatch/modules/backup/restore.sh $*" ;;
+  desktop)
+    [[ $(uname) == Darwin ]] || { echo "The desktop app is macOS only. Elsewhere: ./keepwatch tunnel" >&2; exit 1; }
+    need_conf
+    dir="$HOME/Library/Application Support/Keepwatch"
+    mkdir -p "$dir"
+    python3 "$LIB/kwconf.py" desktop-json > "$dir/config.json"
+    echo "  wrote $dir/config.json"
+    # Default: build, install to /Applications and launch. --build-only leaves it in desktop/build/.
+    if [[ ${1:-} == --build-only ]]; then exec "$ROOT/desktop/build.sh"; else exec "$ROOT/desktop/build.sh" --install; fi ;;
+  ""|-h|--help|help)
+    usage ;;
+  *)
+    echo "Unknown command: $cmd" >&2; usage >&2; exit 2 ;;
+esac

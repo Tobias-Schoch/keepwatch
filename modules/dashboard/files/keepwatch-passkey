@@ -1,0 +1,7 @@
+#!/bin/sh
+# Keepwatch passkey emergency tool (dashboard module):
+#   keepwatch-passkey list    registered devices
+#   keepwatch-passkey reset   remove all devices -> passkeys off, dangerous actions work without
+#                             confirmation until a device is registered again (dashboard -> Settings)
+# Whoever can run this is root on the server already - the way out weakens nothing.
+exec /usr/bin/python3 @KW_ROOT@/dashboard/server/touchid.py "$@"

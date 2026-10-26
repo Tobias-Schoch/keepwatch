@@ -1,0 +1,39 @@
+/* Certificate watch (CtWatchCard.tsx). Only ctw-*. The header row is shared by ctw and sec (secrets). */
+
+html[data-design^="obsidian"] .ctw.o-panel { padding: 16px 20px; }
+html[data-design^="obsidian"] .ctw-head { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+html[data-design^="obsidian"] .ctw-icon {
+  display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 10px;
+  color: var(--o-mute); background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--o-line);
+}
+html[data-design^="obsidian"] .ctw.is-alert .ctw-icon { color: rgb(234 140 152); background: rgb(234 140 152 / 0.08); box-shadow: inset 0 0 0 1px rgb(234 140 152 / 0.25); }
+html[data-design^="obsidian"] .ctw-title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--o-text); }
+html[data-design^="obsidian"] .ctw-sub { margin-top: 1px; font-size: 12.5px; color: var(--o-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-design^="obsidian"] .ctw-dim { color: var(--o-dim); }
+html[data-design^="obsidian"] .ctw-loud { font-weight: 600; color: rgb(234 140 152); }
+html[data-design^="obsidian"] .ctw-err { color: rgb(216 193 142); }
+html[data-design^="obsidian"] .ctw-aside { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+html[data-design^="obsidian"] .ctw-fold { font-size: 12.5px; }
+
+html[data-design^="obsidian"] .ctw-list { margin-top: 12px; display: flex; flex-direction: column; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--o-line); overflow: hidden; }
+html[data-design^="obsidian"] .ctw-list.is-alerts { box-shadow: inset 0 0 0 1px rgb(234 140 152 / 0.25); }
+html[data-design^="obsidian"] .ctw-row {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 84px 64px 112px; align-items: center; gap: 10px;
+  min-height: 40px; padding: 4px 8px 4px 14px; font-size: 12.5px; color: var(--o-text);
+}
+html[data-design^="obsidian"] .ctw-row + .ctw-row, html[data-design^="obsidian"] .ctw-bulk + .ctw-row { border-top: 1px solid var(--o-line); }
+html[data-design^="obsidian"] .ctw-row.is-alert { background: rgb(234 140 152 / 0.045); }
+html[data-design^="obsidian"] .ctw-row.is-quiet { color: var(--o-mute); }
+html[data-design^="obsidian"] .ctw-row.is-expired .ctw-date { text-decoration: line-through; text-decoration-color: var(--o-dim); }
+html[data-design^="obsidian"] .ctw-name { font-family: var(--o-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-design^="obsidian"] .ctw-issuer { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--o-mute); }
+html[data-design^="obsidian"] .ctw-date { font-family: var(--o-mono); font-size: 11.5px; color: var(--o-mute); font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .ctw-yes { font-size: 11.5px; color: var(--o-dim); }
+html[data-design^="obsidian"] .ctw-acts { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+html[data-design^="obsidian"] .ctw-bulk { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 14px; font-size: 12.5px; color: var(--o-mute); background: rgb(216 193 142 / 0.03); }
+
+@media (max-width: 640px) {
+  html[data-design^="obsidian"] .ctw-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  html[data-design^="obsidian"] .ctw-issuer, html[data-design^="obsidian"] .ctw-date { display: none; }
+  html[data-design^="obsidian"] .ctw-sub { white-space: normal; }
+}

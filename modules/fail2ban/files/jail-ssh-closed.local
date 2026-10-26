@@ -1,0 +1,15 @@
+# Keepwatch: /etc/fail2ban/jail.d/keepwatch-ssh-closed.local (only with the firewall module).
+# SSH closed to the internet (Tailscale only): whoever still tries is a
+# scanner -> banned at once. Not cosmetic: if the SSH fallback ever reopens
+# the port, every known scanner is already out.
+[ssh-closed]
+enabled  = true
+filter   = keepwatch-ssh-closed
+# fail2ban does not read kernel messages from the journal reliably -
+# rsyslog also writes them to kern.log.
+backend  = auto
+logpath  = /var/log/kern.log
+port     = ssh
+maxretry = 1
+findtime = 24h
+bantime  = @SSH_BANTIME@

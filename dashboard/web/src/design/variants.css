@@ -1,0 +1,42 @@
+/* Obsidian Graphite — the dashboard's only design. Everything shared lives in obsidian.css
+   (html[data-design^="obsidian"]); this file only turns color, light and material to graphite.
+   Doubled attribute selector so these rules always win. */
+
+/* ---- Graphite: no color, only light and metal — sharper, more angular, denser ---------------- */
+html[data-design="obsidian-graphit"][data-design] {
+  --o-bg: #050505;
+  --o-bg-rgb: 5 5 5;
+  --o-text: #f4f4f4;
+  --o-dim: rgba(240, 240, 240, 0.66);
+  --o-mute: rgba(240, 240, 240, 0.44);
+  --o-faint: rgba(240, 240, 240, 0.22);
+  --o-line: rgba(255, 255, 255, 0.07);
+  --o-line-2: rgba(255, 255, 255, 0.12);
+  --o-accent: #ededed;
+  --o-acc: 236 236 236;
+  --o-acc-hi: 255 255 255;
+  --o-acc-1: #ffffff;
+  --o-acc-2: #7c7c7c;
+  --o-hi: #ffffff;
+  --o-hi-2: #ececec;
+  --o-silver: #c4c4c4;
+  --o-silver-dim: #979797;
+  --o-mark-1: #ffffff;
+  --o-mark-2: #a6a6a6;
+  --o-mark-3: #2c2c2c;
+  --o-mark-4: #e4e4e4;
+  --o-mark-5: #1a1a1a;
+  --o-glass: 11 11 11;
+  --o-glass-a: 0.82;
+  --o-radius: 12px;
+}
+html[data-design="obsidian-graphit"][data-design] ::selection { background: rgba(255, 255, 255, 0.24); }
+html[data-design="obsidian-graphit"][data-design] .o-display {
+  font-weight: 500;
+  letter-spacing: -0.05em;
+}
+html[data-design="obsidian-graphit"][data-design] .o-dock { border-radius: 16px; }
+html[data-design="obsidian-graphit"][data-design] .o-dock-item { border-radius: calc(var(--s) * 0.2); }
+html[data-design="obsidian-graphit"][data-design] .o-searchpill { border-radius: 8px; }
+html[data-design="obsidian-graphit"][data-design] .o-toggle.is-on .o-toggle-knob { background: linear-gradient(180deg, #2a2a2a, #111); }
+html[data-design="obsidian-graphit"][data-design] .o-grain { opacity: 0.8; }

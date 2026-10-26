@@ -1,0 +1,12 @@
+name: Bug report
+description: Something did not work as described
+body:
+  - type: textarea
+    attributes: { label: What happened, description: "Command you ran, what you expected, what you got." }
+    validations: { required: true }
+  - type: input
+    attributes: { label: Server OS, placeholder: "Ubuntu 24.04, x86_64, 2 GB RAM" }
+  - type: input
+    attributes: { label: Enabled modules, description: "KW_MODULES from keepwatch.conf" }
+  - type: textarea
+    attributes: { label: Output, description: "Relevant deploy output. Remove IPs and domains you don't want public.", render: text }

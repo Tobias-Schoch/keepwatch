@@ -1,0 +1,37 @@
+/* ---- Command palette ⌘K (palette/Palette.tsx); base layout from .o-palette-* in obsidian.css ---- */
+html[data-design^="obsidian"] .o-dialog.d-palette { max-width: 680px; }
+html[data-design^="obsidian"] .d-palette .o-palette-input input { font-size: 18px; }
+html[data-design^="obsidian"] .d-palette .o-palette-item { cursor: pointer; }
+html[data-design^="obsidian"] .d-pal-title { flex-shrink: 0; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-design^="obsidian"] .d-pal-title b { font-weight: 600; color: var(--o-text); }
+html[data-design^="obsidian"] .d-pal-title.d-mono { font-size: 13px; }
+html[data-design^="obsidian"] .d-pal-foot-hint { margin-left: auto; text-align: right; }
+@media (max-width: 760px) {
+  html[data-design^="obsidian"] .d-pal-foot-hint { display: none !important; }
+  html[data-design^="obsidian"] .d-palette .o-palette-hint { display: none; }
+}
+
+html[data-design^="obsidian"] .d-pal-ip { margin: 4px 4px 8px; padding: 14px 16px; border-radius: 14px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design^="obsidian"] .d-pal-ip-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 15px; color: var(--o-text); }
+html[data-design^="obsidian"] .d-pal-tag { height: 22px; display: inline-flex; align-items: center; padding: 0 9px; border-radius: 99px; font-size: 12px; color: var(--o-dim); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design^="obsidian"] .d-pal-tag[data-tone="rose"] { color: rgb(240 170 180); box-shadow: inset 0 0 0 1px rgba(234, 140, 152, 0.5); }
+html[data-design^="obsidian"] .d-pal-ip-facts { display: grid; gap: 6px; margin: 12px 0 0; font-size: 13px; }
+html[data-design^="obsidian"] .d-pal-ip-facts > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; }
+html[data-design^="obsidian"] .d-pal-ip-facts dt { color: var(--o-mute); }
+html[data-design^="obsidian"] .d-pal-ip-facts dd { margin: 0; color: var(--o-dim); }
+html[data-design^="obsidian"] .d-pal-ip-dim { margin: 10px 0 0; font-size: 12.5px; color: var(--o-mute); }
+
+/* "⌘K Search" button in the header */
+html[data-design^="obsidian"] .d-search-btn .o-kbd { font-size: 10.5px; }
+
+/* The target of a jump from the palette flashes briefly */
+html[data-design^="obsidian"] .d-flash { animation: d-flash 1.9s ease both; border-radius: 14px; }
+@keyframes d-flash {
+  0%, 35% { box-shadow: 0 0 0 2px rgb(var(--o-acc) / 0.75), 0 0 40px -6px rgb(var(--o-acc) / 0.55); }
+  100% { box-shadow: 0 0 0 2px rgb(var(--o-acc) / 0), 0 0 40px -6px rgb(var(--o-acc) / 0); }
+}
+html[data-design^="obsidian"] tr.d-flash { animation: d-flash-row 1.9s ease both; }
+@keyframes d-flash-row { 0%, 35% { background: rgb(var(--o-acc) / 0.14); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-design^="obsidian"] .d-flash, html[data-design^="obsidian"] tr.d-flash { animation-duration: 0.01s; }
+}

@@ -1,0 +1,17 @@
+# Your server's configuration - personal, never committed (the example is).
+keepwatch.conf
+*.tmp
+.deploy-info
+
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+node_modules/
+dashboard/web/dist/
+desktop/build/
+
+*.env
+!*.env.example
+*.pem
+*.key

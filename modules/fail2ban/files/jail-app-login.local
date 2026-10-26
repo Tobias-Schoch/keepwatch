@@ -1,0 +1,20 @@
+# Keepwatch: /etc/fail2ban/jail.d/keepwatch-app-login.local (only with the proxy module).
+# Wrong password/token on your websites (admin, login). Milder than SSH -
+# there is no legitimate SSH failure, but people do mistype passwords:
+# 5 failures in 1 h -> banned for a day on all ports. Coming back doubles the
+# ban (bantime.increment), 2 bans in 30 days trigger recidive (a year).
+[app-login]
+enabled   = true
+filter    = keepwatch-app-login
+backend   = auto
+# fallback_http_access.log never matches here; it is listed so the jail
+# always has a file to watch on a fresh proxy without any site yet.
+logpath   = @LOGS@/proxy-host-*_access.log
+            @LOGS@/fallback_http_access.log
+maxretry  = 5
+findtime  = 1h
+bantime   = 1d
+# Never internal addresses (Docker, health checks) and the tailnet.
+ignoreip  = 127.0.0.1/8 ::1 %(keepwatch_ignore)s 10.0.0.0/8 172.16.0.0/12 100.64.0.0/10 fd7a:115c:a1e0::/48
+chain     = f2b-before-docker
+banaction = nftables[type=allports, chain_hook=prerouting, chain_priority=-150, blocktype=drop]

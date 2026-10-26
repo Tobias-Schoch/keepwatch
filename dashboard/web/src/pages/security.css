@@ -1,0 +1,89 @@
+/* Security page – only used here. */
+
+/* Fact list: one row per topic, details behind a click (like the targets on Backups). */
+html[data-design^="obsidian"] .o-panel.s-facts { padding-top: 6px; padding-bottom: 6px; }
+html[data-design^="obsidian"] .s-fact + .s-fact { border-top: 1px solid var(--o-line); }
+html[data-design^="obsidian"] .s-fact-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 4px 16px;
+  width: 100%;
+  padding: 13px 0;
+  font-size: 13px;
+  text-align: left;
+  color: var(--o-dim);
+  font-variant-numeric: tabular-nums;
+}
+html[data-design^="obsidian"] .s-fact-label { color: var(--o-text); font-weight: 500; }
+html[data-design^="obsidian"] .s-fact-sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-design^="obsidian"] .s-fact-status { color: var(--o-mute); white-space: nowrap; text-align: right; }
+html[data-design^="obsidian"] .s-fact-chev { color: var(--o-faint); transition: color 0.2s, transform 0.4s var(--o-spring); }
+html[data-design^="obsidian"] .s-fact-row:hover .s-fact-chev,
+html[data-design^="obsidian"] .s-fact-row:hover .s-fact-sum { color: var(--o-text); }
+html[data-design^="obsidian"] .s-fact-row:focus-visible { outline: none; }
+html[data-design^="obsidian"] .s-fact-row:focus-visible .s-fact-label { text-decoration: underline; text-underline-offset: 3px; }
+/* Problem: the row stands out, otherwise everything stays quiet. */
+html[data-design^="obsidian"] .s-fact[data-tone="rose"] .s-fact-status,
+html[data-design^="obsidian"] .s-fact[data-tone="rose"] .s-fact-label { color: var(--o-rose); }
+html[data-design^="obsidian"] .s-fact[data-tone="sand"] .s-fact-status,
+html[data-design^="obsidian"] .s-fact[data-tone="sand"] .s-fact-label { color: var(--o-sand); }
+html[data-design^="obsidian"] .s-fact-body { padding: 0 0 16px; }
+html[data-design^="obsidian"] .s-fact-body > .d-table-wrap { margin-top: 2px; }
+
+/* Long ban list: scrolls inside instead of stretching the page. */
+html[data-design^="obsidian"] .s-scroll { max-height: 460px; overflow-y: auto; }
+html[data-design^="obsidian"] .s-scroll thead th { position: sticky; top: 0; z-index: 1; background: rgb(24 24 26); }
+
+/* Counter line (jails, auditd keys) as quiet text instead of chips. */
+html[data-design^="obsidian"] .s-jails { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: 12.5px; color: var(--o-mute); }
+html[data-design^="obsidian"] .s-jails b { color: var(--o-dim); font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .s-jails .is-sand,
+html[data-design^="obsidian"] .s-jails .is-sand b { color: var(--o-sand); }
+html[data-design^="obsidian"] .s-times { font-size: 11.5px; font-weight: 500; color: var(--o-sand); }
+
+/* Hardening (Lynis): header with "Check now", then per recommendation a title, one sentence, parts. */
+html[data-design^="obsidian"] .s-ly-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12.5px; color: var(--o-mute); font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .s-ly-head b { color: var(--o-dim); font-weight: 600; }
+html[data-design^="obsidian"] .s-ly-run { margin-left: auto; }
+html[data-design^="obsidian"] .s-ly-error { margin: 8px 0 0; font-size: 12.5px; color: var(--o-rose); }
+html[data-design^="obsidian"] .s-ly-list { margin: 6px 0 0; padding: 0; list-style: none; }
+html[data-design^="obsidian"] .s-ly { padding: 10px 0; }
+html[data-design^="obsidian"] .s-ly + .s-ly { border-top: 1px solid var(--o-line); }
+html[data-design^="obsidian"] .s-ly-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+html[data-design^="obsidian"] .s-ly-title { font-size: 13px; font-weight: 500; color: var(--o-text); }
+html[data-design^="obsidian"] .s-ly-id { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; font-family: var(--o-mono); font-size: 11.5px; color: var(--o-faint); transition: color 0.2s; }
+html[data-design^="obsidian"] a.s-ly-id:hover { color: var(--o-text); }
+html[data-design^="obsidian"] .s-ly-hint { margin: 3px 0 0; max-width: 78ch; font-size: 12.5px; line-height: 1.5; color: var(--o-mute); }
+html[data-design^="obsidian"] .s-ly-items { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 5px; font-size: 12px; color: var(--o-dim); }
+html[data-design^="obsidian"] .s-ly-items .d-mono { font-size: 12px; }
+html[data-design^="obsidian"] .s-ly-items > span { min-width: 0; overflow-wrap: anywhere; }
+html[data-design^="obsidian"] .s-ly-detail { color: var(--o-faint); white-space: nowrap; }
+html[data-design^="obsidian"] .s-ly.is-accepted .s-ly-title { font-weight: 400; color: var(--o-dim); }
+html[data-design^="obsidian"] .s-ly-parts { margin: 3px 0 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.5; color: var(--o-mute); }
+html[data-design^="obsidian"] .s-ly-parts .d-mono { font-size: 12px; color: var(--o-dim); }
+html[data-design^="obsidian"] .s-ly-parts li + li { margin-top: 2px; }
+/* From the palette: the requested recommendation flashes briefly. */
+html[data-design^="obsidian"] .s-ly.d-flash { border-radius: 8px; }
+
+/* Totals above the bar chart; the red key explains the red share. */
+html[data-design^="obsidian"] .s-totals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin: -4px 0 10px; font-size: 13px; color: var(--o-mute); }
+html[data-design^="obsidian"] .s-totals b { color: var(--o-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-design^="obsidian"] .s-key { display: inline-flex; align-items: center; gap: 6px; }
+html[data-design^="obsidian"] .s-key i { width: 8px; height: 8px; border-radius: 2px; background: var(--o-rose); opacity: 0.85; }
+html[data-design^="obsidian"] .s-key b { color: var(--o-rose); }
+
+@media (max-width: 640px) {
+  html[data-design^="obsidian"] .s-fact-row {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    grid-template-areas: "label status chev" "sum sum sum";
+    padding: 12px 0;
+  }
+  html[data-design^="obsidian"] .s-fact-label { grid-area: label; }
+  html[data-design^="obsidian"] .s-fact-status { grid-area: status; font-size: 12px; }
+  html[data-design^="obsidian"] .s-fact-chev { grid-area: chev; }
+  html[data-design^="obsidian"] .s-fact-sum { grid-area: sum; white-space: normal; font-size: 12.5px; }
+  /* Narrow tables: country as code only (the name goes, the code stays). */
+  html[data-design^="obsidian"] .s-narrow .d-country > span { display: none; }
+  html[data-design^="obsidian"] .s-addr { max-width: 120px; }
+}

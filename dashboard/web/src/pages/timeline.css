@@ -1,0 +1,89 @@
+/* Timeline "What happened?" – page #timeline and the "Since yesterday" section on the overview.
+   One row per event, color only for problems: warn = sand, crit = rose. Everything else stays gray. */
+
+html[data-design^="obsidian"] .d-tl-filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 24px;
+}
+html[data-design^="obsidian"] .d-tl-filters .o-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+html[data-design^="obsidian"] .d-tl-filters .o-seg::-webkit-scrollbar { display: none; }
+html[data-design^="obsidian"] .d-tl-select { width: auto; min-width: 150px; max-width: 180px; height: 34px; font-size: 13px; padding-right: 30px; cursor: pointer; color-scheme: dark; }
+html[data-design^="obsidian"] .d-tl-chip { display: inline-flex; align-items: center; gap: 7px; height: 34px; }
+html[data-design^="obsidian"] .d-tl-chipcount { font-size: 11.5px; color: var(--o-rose); font-variant-numeric: tabular-nums; }
+
+/* Day */
+html[data-design^="obsidian"] .d-tl-day + .d-tl-day { margin-top: 22px; }
+html[data-design^="obsidian"] .d-tl-dayhead {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 4px; padding: 0 0 8px; border-bottom: 1px solid var(--o-line); font-size: 14px; font-weight: 600; color: var(--o-text);
+}
+html[data-design^="obsidian"] .d-tl-daydate { font-size: 12.5px; font-weight: 400; color: var(--o-mute); }
+html[data-design^="obsidian"] .d-tl-daycount { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--o-faint); }
+html[data-design^="obsidian"] .d-tl-dayprob { color: var(--o-sand); }
+
+/* List with time rail */
+html[data-design^="obsidian"] .d-tl-list { position: relative; list-style: none; margin: 0; padding: 0; }
+html[data-design^="obsidian"] .d-tl-list::before {
+  content: ""; position: absolute; left: 67px; top: 12px; bottom: 12px; width: 1px; background: var(--o-line-2);
+}
+html[data-design^="obsidian"] .d-tl-row {
+  position: relative; display: grid; grid-template-columns: 52px 14px 72px minmax(0, 1fr) 16px; align-items: center;
+  column-gap: 8px; width: 100%; min-height: 34px; padding: 5px 10px 5px 0; border-radius: 10px; text-align: left; color: inherit; font: inherit;
+  background: transparent; transition: background 0.18s;
+}
+html[data-design^="obsidian"] .d-tl-row.is-link { cursor: pointer; }
+html[data-design^="obsidian"] .d-tl-row.is-link:hover { background: rgba(255, 255, 255, 0.035); }
+html[data-design^="obsidian"] .d-tl-row.is-link:focus-visible { outline: none; box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.55); }
+html[data-design^="obsidian"] .d-tl-time { justify-self: end; font-size: 12.5px; color: var(--o-mute); white-space: nowrap; }
+html[data-design^="obsidian"] .d-tl-dot {
+  justify-self: center; width: 7px; height: 7px; border-radius: 99px;
+  background: var(--o-bg); box-shadow: inset 0 0 0 1.5px var(--o-faint);
+}
+html[data-design^="obsidian"] .d-tl-kind { justify-self: start; font-size: 11.5px; color: var(--o-faint); white-space: nowrap; }
+html[data-design^="obsidian"] .d-tl-main { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+html[data-design^="obsidian"] .d-tl-title { flex: 0 1 auto; max-width: 75%; min-width: 0; font-size: 13.5px; color: var(--o-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-design^="obsidian"] .d-tl-detail { flex: 1 1 0; min-width: 0; font-size: 12.5px; color: var(--o-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-design^="obsidian"] .d-tl-go { width: 14px; height: 14px; color: var(--o-faint); opacity: 0; transition: opacity 0.18s, transform 0.18s; }
+html[data-design^="obsidian"] .d-tl-row.is-link:hover .d-tl-go { opacity: 1; transform: translateX(2px); }
+
+/* Bundle: double dot, expand arrow always visible */
+html[data-design^="obsidian"] .d-tl-item.is-bundle > .d-tl-row .d-tl-dot { box-shadow: inset 0 0 0 1.5px var(--o-faint), 0 0 0 3px var(--o-bg), 0 0 0 4px var(--o-line-2); }
+html[data-design^="obsidian"] .d-tl-go.is-fold { opacity: 1; }
+html[data-design^="obsidian"] .d-tl-row.is-link:hover .d-tl-go.is-fold { transform: none; color: var(--o-dim); }
+html[data-design^="obsidian"] .d-tl-list.is-sub { margin: 2px 0 6px; }
+html[data-design^="obsidian"] .d-tl-list.is-sub::before { display: none; }
+html[data-design^="obsidian"] .d-tl-list.is-sub .d-tl-row { min-height: 30px; padding-top: 3px; padding-bottom: 3px; }
+html[data-design^="obsidian"] .d-tl-list.is-sub .d-tl-time { font-size: 11.5px; color: var(--o-faint); }
+html[data-design^="obsidian"] .d-tl-list.is-sub .d-tl-dot { width: 5px; height: 5px; }
+html[data-design^="obsidian"] .d-tl-list.is-sub .d-tl-kind { visibility: hidden; }
+html[data-design^="obsidian"] .d-tl-list.is-sub .d-tl-title { font-size: 12.5px; color: var(--o-dim); }
+
+/* Problems: the only place with color */
+html[data-design^="obsidian"] .d-tl-item[data-tone="sand"] .d-tl-dot { background: var(--o-sand); box-shadow: 0 0 8px rgb(216 193 142 / 0.6); }
+html[data-design^="obsidian"] .d-tl-item[data-tone="rose"] .d-tl-dot { background: var(--o-rose); box-shadow: 0 0 8px rgb(234 140 152 / 0.7); }
+html[data-design^="obsidian"] .d-tl-item[data-tone="sand"] .d-tl-kind,
+html[data-design^="obsidian"] .d-tl-item[data-tone="sand"] .d-tl-title { color: var(--o-sand); }
+html[data-design^="obsidian"] .d-tl-item[data-tone="rose"] .d-tl-kind,
+html[data-design^="obsidian"] .d-tl-item[data-tone="rose"] .d-tl-title { color: var(--o-rose); }
+
+/* Overview: no day headings, time with "yesterday" */
+html[data-design^="obsidian"] .d-tl-list.is-compact .d-tl-row { grid-template-columns: 92px 14px 72px minmax(0, 1fr) 16px; }
+html[data-design^="obsidian"] .d-tl-list.is-compact::before { left: 107px; }
+
+html[data-design^="obsidian"] .d-tl-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 22px; }
+html[data-design^="obsidian"] .d-tl-foot .o-sub { font-size: 12px; color: var(--o-faint); }
+
+@media (max-width: 640px) {
+  html[data-design^="obsidian"] .d-tl-row,
+  html[data-design^="obsidian"] .d-tl-list.is-compact .d-tl-row { grid-template-columns: 44px 12px minmax(0, 1fr) 14px; align-items: start; padding: 6px 4px 6px 0; }
+  html[data-design^="obsidian"] .d-tl-list::before, html[data-design^="obsidian"] .d-tl-list.is-compact::before { left: 50px; }
+  html[data-design^="obsidian"] .d-tl-list.is-compact .d-tl-time { font-size: 11px; white-space: normal; text-align: right; }
+  html[data-design^="obsidian"] .d-tl-time { padding-top: 1px; }
+  html[data-design^="obsidian"] .d-tl-dot { margin-top: 6px; }
+  html[data-design^="obsidian"] .d-tl-kind { display: none; }
+  html[data-design^="obsidian"] .d-tl-main { flex-direction: column; gap: 1px; }
+  html[data-design^="obsidian"] .d-tl-title { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  html[data-design^="obsidian"] .d-tl-detail { flex: none; width: 100%; }
+  html[data-design^="obsidian"] .d-tl-go { display: none; }
+  html[data-design^="obsidian"] .d-tl-go.is-fold { display: block; margin-top: 2px; }
+  html[data-design^="obsidian"] .d-tl-select { flex: 1; max-width: none; }
+}

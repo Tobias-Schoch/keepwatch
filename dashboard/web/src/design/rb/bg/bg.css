@@ -1,0 +1,25 @@
+/* React Bits backgrounds in Obsidian: fill the fixed backdrop (.o-backdrop). */
+html[data-design^="obsidian"] .dot-field-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+html[data-design^="obsidian"] .dot-field-glow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Veil over React Bits backgrounds: content stays readable, darker at top and bottom. */
+html[data-design^="obsidian"] .o-rb-veil { position: absolute; inset: 0; pointer-events: none; }
+html[data-design^="obsidian"] .o-rb-app .o-rb-veil {
+  background:
+    linear-gradient(180deg, rgb(var(--o-bg-rgb) / 0.55) 0%, rgb(var(--o-bg-rgb) / 0.15) 30%, rgb(var(--o-bg-rgb) / 0.1) 70%, rgb(var(--o-bg-rgb) / 0.55) 100%);
+}
+/* Small canvas around the cursor (see DotField.tsx): only it is redrawn on movement. */
+html[data-design^="obsidian"] .dot-field-near { pointer-events: none; will-change: transform; }

@@ -1,0 +1,5 @@
+# Keepwatch: /etc/fail2ban/fail2ban.d/keepwatch.local
+# Remember banned addresses for 400 days (default: 1 day). Without this,
+# bantime.increment forgets repeat offenders after a day.
+[Definition]
+dbpurgeage = 400d

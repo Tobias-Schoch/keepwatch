@@ -1,0 +1,84 @@
+# Keepwatch configuration
+#
+# Written by `./keepwatch setup`. Edit freely, then run `./keepwatch deploy`.
+# Shell syntax (KEY="value"); read by bash on the server and by Python in the
+# dashboard. Never put secrets in here - they live on the server in
+# /etc/keepwatch/ and in your backup.
+#
+# Settings you can change in the dashboard (update time, fail2ban limits,
+# backup retention, SSH from the internet, ...) are only *initial values*:
+# deploy writes them once and never reverts what you changed there.
+
+# --- Connection (used on your computer) ------------------------------------
+KW_HOST="203.0.113.10"          # IP or DNS name deploy connects to (with Tailscale: its MagicDNS name)
+KW_SSH_USER="root"              # root, or a user with passwordless sudo
+KW_SSH_PORT="22"
+
+# --- Server -----------------------------------------------------------------
+KW_HOSTNAME="keep"
+KW_TIMEZONE="Etc/UTC"           # system clock (UTC keeps logs unambiguous)
+KW_LOCAL_TZ="Etc/UTC"           # YOUR timezone: schedules below and day boundaries in the dashboard
+KW_EMAIL=""                     # optional: Let's Encrypt account, certificate notices
+KW_TRUSTED_IPS=""               # never banned, never counted as attacks (your home IP, office range, ...)
+
+# --- Modules ----------------------------------------------------------------
+# Everything except "base" is optional. `./keepwatch modules` lists them,
+# `./keepwatch enable|disable <module>` edits this line for you (with dependencies).
+# A module you remove here is cleanly uninstalled on the next deploy (its data stays).
+KW_MODULES="base debloat auto-updates ssh-hardening kernel-hardening auditd fail2ban ban-history firewall tailscale docker log-archive backup image-scan lynis proxy portainer dashboard"
+
+# --- debloat ------------------------------------------------------------------
+KW_DEBLOAT_COMPILERS="yes"      # purge gcc/make/... (Lynis HRDN-7222); kept anyway if DKMS or your packages need them
+
+# --- auto-updates -------------------------------------------------------------
+KW_UPDATE_TIME="04:00"          # security updates (in KW_LOCAL_TZ)
+KW_AUTO_REBOOT="yes"            # reboot right after an update that needs it
+
+# --- firewall -----------------------------------------------------------------
+KW_PUBLIC_TCP="80 443"          # TCP ports open to the internet (besides SSH). Everything else is closed,
+                                # including ports Docker publishes (Docker bypasses ufw - this does not).
+KW_SSH_PUBLIC="yes"             # "no": SSH only through Tailscale (needs the tailscale module)
+KW_PUBLIC_UDP=""                # UDP ports containers may receive from the internet (host UDP is not filtered)
+
+# --- fail2ban -------------------------------------------------------------------
+KW_F2B_SSH_BANTIME="1w"         # first ban; repeat offenders get doubled up to a year
+KW_F2B_SSH_MAXRETRY="1"         # failed SSH logins from the internet before a ban (keys only: every failure is a bot)
+KW_F2B_WEB_SCANNER="yes"        # ban clients probing for .env, .git, wp-login, ... (needs proxy)
+KW_F2B_APP_LOGIN="yes"          # ban after 5 failed logins (401/403 on login/admin paths) in 1 h (needs proxy)
+
+# --- ban-history ------------------------------------------------------------------
+KW_BANHISTORY_DAYS="60"         # keep re-banning a past SSH attacker this long after its last attempt
+KW_BANHISTORY_SPARE_COUNTRIES="" # e.g. "DE AT": spare addresses from there with few attempts (hijacked home lines; needs dashboard)
+KW_BANHISTORY_SPARE_BELOW="100" # ... with fewer attempts than this
+
+# --- docker -----------------------------------------------------------------------
+KW_PROXY_NETWORK="proxy-net"    # shared network: the proxy reaches your containers by name
+KW_DOCKER_NETWORKS=""           # more networks to create, space separated
+
+# --- backup -----------------------------------------------------------------------
+KW_BACKUP_TIME="03:00"
+KW_BACKUP_PATHS="/etc /root /opt /srv /usr/local/sbin /usr/local/bin /var/lib/docker/volumes /var/lib/keepwatch /var/lib/tailscale"
+KW_BACKUP_EXCLUDE="/root/.cache */node_modules"
+KW_BACKUP_KEEP="7 4 6"          # local: daily weekly monthly
+KW_BACKUP_REMOTE=""             # off-site restic repository, e.g. s3:https://s3.eu-central-1.amazonaws.com/my-bucket,
+                                # b2:bucket:path, sftp:user@host:/path, rest:https://..., rclone:remote:path.
+                                # Empty = local only. Credentials are asked for on the server during deploy.
+KW_BACKUP_REMOTE_KEEP="14 13 24"
+
+# --- image-scan / lynis --------------------------------------------------------------
+KW_IMAGE_SCAN_TIME="Sun 01:30"  # Trivy scan of all container images
+KW_LYNIS_TIME="Sun 00:30"       # Lynis hardening audit
+
+# --- proxy (Nginx Proxy Manager) ------------------------------------------------------
+KW_PROXY_ADMIN_PORT="9001"      # admin UI on 127.0.0.1 only
+KW_PROXY_RATE="20"              # requests per second per IP, for all sites (0 = off)
+KW_PROXY_BURST="100"
+
+# --- portainer --------------------------------------------------------------------------
+KW_PORTAINER_PORT="9002"        # on 127.0.0.1 only
+KW_PORTAINER_WEBHOOKS=""        # deploy webhooks reachable from the internet: "<webhook-id>@<domain> ..." (POST only)
+
+# --- dashboard --------------------------------------------------------------------------
+KW_DASHBOARD_PORT="9004"        # on 127.0.0.1 only - `./keepwatch tunnel` or the macOS app
+KW_DASHBOARD_PASSKEY="yes"      # dangerous actions need a passkey (Touch ID, Windows Hello, security key)
+KW_EXTRA_UIS=""                 # your own admin UIs on 127.0.0.1, for the tunnel: "Name=port Other=port"

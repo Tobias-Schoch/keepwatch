@@ -1,0 +1,13 @@
+[Unit]
+Description=Keepwatch image scan, weekly at night
+
+[Timer]
+# Rewritten by the image-scan module from KW_IMAGE_SCAN_TIME (in KW_LOCAL_TZ).
+# Default: before the backup and the updates, not at the same time as the
+# monthly backup self-test.
+OnCalendar=Sun *-*-* 01:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

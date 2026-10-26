@@ -1,0 +1,30 @@
+/* Uptime in the site row (Uptime.tsx). Only up-*. */
+
+html[data-design^="obsidian"] .up-strip-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; padding: 2px 4px 2px 0; border-radius: 6px; max-width: 100%; }
+html[data-design^="obsidian"] .up-strip-btn:focus-visible { outline: 2px solid rgb(var(--o-acc) / 0.5); outline-offset: 2px; }
+html[data-design^="obsidian"] .up-strip { position: relative; display: inline-flex; align-items: stretch; gap: 1px; height: 14px; flex-shrink: 1; min-width: 0; }
+html[data-design^="obsidian"] .up-strip.is-loading { width: 180px; height: 14px; margin-top: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.03); }
+html[data-design^="obsidian"] .up-strip i { width: 2px; border-radius: 1px; background: rgba(255, 255, 255, 0.08); transition: transform 0.15s, filter 0.15s; }
+html[data-design^="obsidian"] .up-strip i[data-tone="ok"] { background: rgb(143 207 176 / 0.75); }
+html[data-design^="obsidian"] .up-strip i[data-tone="sand"] { background: var(--o-sand); }
+html[data-design^="obsidian"] .up-strip i[data-tone="rose"] { background: var(--o-rose); box-shadow: 0 0 6px rgb(234 140 152 / 0.5); }
+html[data-design^="obsidian"] .up-strip i:hover { transform: scaleY(1.25); filter: brightness(1.3); }
+html[data-design^="obsidian"] .up-tip {
+  position: absolute; bottom: calc(100% + 8px); z-index: 20; transform: translateX(-50%); padding: 6px 9px; border-radius: 8px; white-space: nowrap; pointer-events: none;
+  font-size: 11.5px; color: var(--o-dim); background: rgba(18, 18, 24, 0.96); box-shadow: inset 0 0 0 1px var(--o-line-2), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+html[data-design^="obsidian"] .up-tip b { margin-right: 6px; font-weight: 500; color: var(--o-text); }
+html[data-design^="obsidian"] .up-pct { font: 500 12px/1 var(--o-mono); color: var(--o-dim); white-space: nowrap; }
+html[data-design^="obsidian"] .up-pct.is-warn { color: var(--o-sand); }
+html[data-design^="obsidian"] .up-pct.is-down { font-family: var(--o-sans); color: var(--o-rose); }
+html[data-design^="obsidian"] .up-nodata { font-size: 12px; color: var(--o-faint); }
+html[data-design^="obsidian"] .up-chev { flex-shrink: 0; color: var(--o-faint); transition: transform 0.25s var(--o-ease), color 0.2s; }
+html[data-design^="obsidian"] .up-chev.is-open { transform: rotate(180deg); color: var(--o-dim); }
+html[data-design^="obsidian"] .up-strip-btn:hover .up-chev { color: var(--o-dim); }
+
+html[data-design^="obsidian"] tr.up-row > td { padding-top: 0; background: rgba(255, 255, 255, 0.012); }
+html[data-design^="obsidian"] .up-detail { padding: 6px 4px 14px; }
+html[data-design^="obsidian"] .up-detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+html[data-design^="obsidian"] .up-empty { padding: 28px 0; text-align: center; font-size: 13px; color: var(--o-mute); }
+html[data-design^="obsidian"] .up-outages { margin-top: 14px; }
+html[data-design^="obsidian"] .up-outages .d-table { margin-top: 6px; }

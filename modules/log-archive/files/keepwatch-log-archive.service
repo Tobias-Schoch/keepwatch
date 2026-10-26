@@ -1,0 +1,56 @@
+[Unit]
+Description=Keepwatch container log archive (keeps logs across container re-creation)
+Documentation=https://github.com/Tobias-Schoch/keepwatch
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/keepwatch-log-archive
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+# SIGTERM: reads everything still pending, writes it, saves the position (state.json), then exits.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+# Lightweight and harmless for the services it watches: low priority, fixed limits.
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=256M
+CPUQuota=25%
+# Reads /var/lib/docker/containers (root), talks to /var/run/docker.sock.
+# Writes only to the archive and to its own state directory.
+ProtectSystem=strict
+ReadWritePaths=/var/log/keepwatch/containers /var/lib/keepwatch/log-archive
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+UMask=0027
+# Lynis BOOT-5264: drop everything a pure reader of files and docker.sock does not need.
+# Private network without interfaces: docker.sock is a filesystem socket and still works.
+PrivateNetwork=yes
+IPAddressDeny=any
+DevicePolicy=closed
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target

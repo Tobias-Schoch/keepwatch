@@ -1,0 +1,15 @@
+# Keepwatch: /etc/fail2ban/jail.d/keepwatch-web-scanner.local (only with the proxy module).
+# Whoever probes for .env, .git, WordPress, PHP & co. -> out at once, on all
+# ports, before Docker (see recidive in keepwatch.local).
+[web-scanner]
+enabled   = true
+filter    = keepwatch-web-scanner
+backend   = auto
+logpath   = @LOGS@/proxy-host-*_access.log
+            @LOGS@/fallback_http_access.log
+            @LOGS@/default-host_access.log
+maxretry  = 1
+findtime  = 24h
+bantime   = 1w
+chain     = f2b-before-docker
+banaction = nftables[type=allports, chain_hook=prerouting, chain_priority=-150, blocktype=drop]

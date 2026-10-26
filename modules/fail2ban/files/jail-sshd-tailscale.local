@@ -1,0 +1,14 @@
+# Keepwatch: /etc/fail2ban/jail.d/keepwatch-tailscale.local (only with the tailscale module).
+# SSH over Tailscale (100.64.0.0/10): milder - 2 failures in 24 h -> 1 week by
+# default (dashboard: Settings -> fail2ban). A typo (ubuntu@ instead of root@)
+# does not lock you out on the spot. The sshd jail ignores the tailnet.
+[sshd-tailscale]
+enabled       = true
+filter        = sshd[mode=aggressive]
+backend       = systemd
+journalmatch  = _SYSTEMD_UNIT=ssh.service + _COMM=sshd + _COMM=sshd-session
+port          = ssh
+maxretry      = 2
+findtime      = 24h
+bantime       = @SSH_BANTIME@
+ignorecommand = /usr/local/sbin/keepwatch-f2b-not-tailscale <ip>

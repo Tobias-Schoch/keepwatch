@@ -1,0 +1,206 @@
+/* React Bits for Obsidian: Border Glow (all [data-light] surfaces) and Specular Button (buttons).
+   Colors come from the variant variables (--o-acc, --o-acc-1/-2, --o-acc-hi, --o-hi).
+   Selectors are deliberately a bit more specific than in obsidian.css: this sheet may load before it. */
+
+/* ---- Don't inherit cursor variables --------------------------------------------------------
+   Edge light (--gx/--gy/--gi/--ga/--ge) and specular (--sx … --sl) change on every mouse move.
+   If inherited, the browser would recompute the surface's entire content; this way only the
+   surface itself. The pseudo-elements that draw them pick them up explicitly. */
+@property --gx { syntax: "*"; inherits: false; }
+@property --gy { syntax: "*"; inherits: false; }
+@property --gi { syntax: "*"; inherits: false; }
+@property --ga { syntax: "*"; inherits: false; }
+@property --ge { syntax: "*"; inherits: false; }
+@property --sx { syntax: "*"; inherits: false; }
+@property --sy { syntax: "*"; inherits: false; }
+@property --bx { syntax: "*"; inherits: false; }
+@property --by { syntax: "*"; inherits: false; }
+@property --ex { syntax: "*"; inherits: false; }
+@property --ey { syntax: "*"; inherits: false; }
+@property --sl { syntax: "*"; inherits: false; }
+html[data-design^="obsidian"] [data-light]::before,
+html[data-design^="obsidian"] [data-light]::after {
+  --gx: inherit;
+  --gy: inherit;
+  --gi: inherit;
+  --ga: inherit;
+  --ge: inherit;
+}
+html[data-design^="obsidian"] .o-spec::before,
+html[data-design^="obsidian"] .o-spec::after {
+  --sx: inherit;
+  --sy: inherit;
+  --bx: inherit;
+  --by: inherit;
+  --ex: inherit;
+  --ey: inherit;
+  --sl: inherit;
+}
+
+/* ---- Border Glow: colored edge inside the light cone -------------------------------------- */
+html[data-design^="obsidian"] [data-light][data-light] {
+  --o-bg-c1: rgb(var(--o-acc));
+  --o-bg-c2: var(--o-hi);
+  --o-bg-c3: var(--o-acc-1);
+}
+html[data-design^="obsidian"] [data-light][data-light]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background:
+    radial-gradient(140px circle at var(--gx, -999px) var(--gy, -999px), var(--o-hi), transparent 70%),
+    radial-gradient(at 80% 55%, var(--o-bg-c1) 0, transparent 50%),
+    radial-gradient(at 69% 34%, var(--o-bg-c2) 0, transparent 50%),
+    radial-gradient(at 8% 6%, var(--o-bg-c3) 0, transparent 50%),
+    radial-gradient(at 41% 38%, var(--o-bg-c1) 0, transparent 50%),
+    radial-gradient(at 86% 85%, var(--o-bg-c2) 0, transparent 50%),
+    radial-gradient(at 82% 18%, var(--o-bg-c3) 0, transparent 50%),
+    radial-gradient(at 51% 4%, var(--o-bg-c2) 0, transparent 50%),
+    linear-gradient(var(--o-acc-2) 0 0);
+  opacity: calc((var(--ge, 0) - 0.5) * 2);
+  -webkit-mask:
+    conic-gradient(from var(--ga, 0deg) at 50% 50%, #000 25%, transparent 40%, transparent 60%, #000 75%),
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: source-in, xor;
+  mask:
+    conic-gradient(from var(--ga, 0deg) at 50% 50%, #000 25%, transparent 40%, transparent 60%, #000 75%),
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: intersect, exclude;
+  transition: opacity 0.5s ease-out;
+}
+
+/* ---- Border Glow: glow inwards and outwards --------------------------------------------- */
+html[data-design^="obsidian"] .o-bglow {
+  position: absolute;
+  inset: -40px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: calc((var(--ge, 0) - 0.3) / 0.7);
+  -webkit-mask: conic-gradient(from var(--ga, 0deg) at 50% 50%, #000 2.5%, transparent 10%, transparent 90%, #000 97.5%);
+  mask: conic-gradient(from var(--ga, 0deg) at 50% 50%, #000 2.5%, transparent 10%, transparent 90%, #000 97.5%);
+  mix-blend-mode: plus-lighter;
+  transition: opacity 0.5s ease-out;
+}
+html[data-design^="obsidian"] .o-bglow::before {
+  content: "";
+  position: absolute;
+  inset: 40px;
+  border-radius: var(--br, var(--o-radius));
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--o-acc-hi) / 1),
+    inset 0 0 1px 0 rgb(var(--o-acc-hi) / 0.8),
+    inset 0 0 3px 0 rgb(var(--o-acc-hi) / 0.7),
+    inset 0 0 6px 0 rgb(var(--o-acc-hi) / 0.55),
+    inset 0 0 15px 0 rgb(var(--o-acc-hi) / 0.42),
+    inset 0 0 25px 2px rgb(var(--o-acc-hi) / 0.3),
+    inset 0 0 50px 2px rgb(var(--o-acc-hi) / 0.16),
+    0 0 1px 0 rgb(var(--o-acc-hi) / 0.8),
+    0 0 3px 0 rgb(var(--o-acc-hi) / 0.7),
+    0 0 6px 0 rgb(var(--o-acc-hi) / 0.55),
+    0 0 15px 0 rgb(var(--o-acc-hi) / 0.5),
+    0 0 25px 2px rgb(var(--o-acc-hi) / 0.4),
+    0 0 50px 2px rgb(var(--o-acc-hi) / 0.22);
+}
+/* The glow span is appended to the surface — :last-child rules must not count it. */
+html[data-design^="obsidian"] .o-panel > .o-section-head:nth-last-child(2):has(+ .o-bglow) { margin-bottom: 0; }
+
+/* ---- Specular Button ------------------------------------------------------------------------ */
+html[data-design^="obsidian"] .o-btn.o-spec {
+  --sr: 34px;
+  --o-spec-line: var(--o-hi);
+  --o-spec-tint: rgb(var(--o-acc-hi));
+  --o-spec-base: rgb(255 255 255 / 0.1);
+  isolation: isolate;
+}
+html[data-design^="obsidian"] .o-btn.o-spec.o-btn-sm { --sr: 26px; }
+html[data-design^="obsidian"] .o-btn.o-spec.o-btn-lg { --sr: 42px; }
+/* Highlight line on the edge */
+html[data-design^="obsidian"] .o-btn.o-spec::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1.2px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle var(--sr) at var(--sx, 10px) var(--sy, 3px),
+      color-mix(in srgb, var(--o-spec-line) calc(min(var(--sl, 0.3), 1) * 100%), transparent) 0%,
+      color-mix(in srgb, var(--o-spec-tint) calc(min(var(--sl, 0.3), 1) * 55%), transparent) 38%,
+      transparent 74%),
+    radial-gradient(circle calc(var(--sr) * 0.8) at var(--bx, 90%) var(--by, 100%),
+      color-mix(in srgb, var(--o-spec-line) calc(min(var(--sl, 0.3), 1) * 36%), transparent) 0%,
+      transparent 70%),
+    linear-gradient(var(--o-spec-base) 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* Glow around the highlight and a pool of light inside (below the text) */
+html[data-design^="obsidian"] .o-btn.o-spec::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  border-radius: calc(var(--sr) * 0.5);
+  pointer-events: none;
+  background:
+    radial-gradient(circle calc(var(--sr) * 0.55) at calc(var(--sx, 10px) + 6px) calc(var(--sy, 3px) + 6px),
+      color-mix(in srgb, var(--o-spec-tint) calc(min(var(--sl, 0.3), 1.6) * 30%), transparent), transparent 75%),
+    radial-gradient(calc(var(--sr) * 1.6) calc(var(--sr) * 0.95) at calc(var(--ex, 20px) + 6px) calc(var(--ey, 12px) + 6px),
+      color-mix(in srgb, var(--o-spec-tint) calc(min(var(--sl, 0.3), 1.6) * 13%), transparent), transparent 75%);
+}
+html[data-design^="obsidian"] .o-btn.o-spec:disabled::before,
+html[data-design^="obsidian"] .o-btn.o-spec:disabled::after { opacity: 0.4; }
+
+/* Primary: tinted smoked glass instead of silver — the light on the edge is the accent. */
+html[data-design^="obsidian"] .o-btn.o-btn-primary {
+  --o-spec-base: rgb(255 255 255 / 0.16);
+  color: var(--o-hi);
+  font-weight: 560;
+  background:
+    radial-gradient(90% 130% at 50% 135%, rgb(var(--o-acc) / 0.34), transparent 70%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.025) 55%, rgb(var(--o-acc) / 0.07)),
+    rgb(var(--o-glass) / 0.82);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 0 0 0.5px rgb(0 0 0 / 0.7),
+    0 1px 2px rgb(0 0 0 / 0.55),
+    0 12px 30px -12px rgb(var(--o-acc) / 0.55);
+  text-shadow: 0 0 18px rgb(var(--o-acc-hi) / 0.35);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+}
+html[data-design^="obsidian"] .o-btn.o-btn-primary:hover:not(:disabled) {
+  background:
+    radial-gradient(90% 130% at 50% 130%, rgb(var(--o-acc) / 0.46), transparent 72%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.035) 55%, rgb(var(--o-acc) / 0.1)),
+    rgb(var(--o-glass) / 0.82);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 0 0 0.5px rgb(0 0 0 / 0.7),
+    0 1px 2px rgb(0 0 0 / 0.55),
+    0 16px 40px -12px rgb(var(--o-acc) / 0.75);
+}
+html[data-design^="obsidian"] .o-btn.o-btn-primary:disabled {
+  color: var(--o-faint);
+  text-shadow: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+html[data-design^="obsidian"] .o-btn.o-btn-primary .o-kbd-on {
+  color: var(--o-mute);
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+html[data-design^="obsidian"] .o-btn.o-btn-danger {
+  --o-spec-line: rgb(255 214 220);
+  --o-spec-tint: rgb(234 140 152);
+  --o-spec-base: rgb(234 140 152 / 0.18);
+}

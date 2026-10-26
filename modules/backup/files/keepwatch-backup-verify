@@ -1,0 +1,18 @@
+#!/bin/bash
+# Keepwatch backup self-test (keepwatch-backup-verify.timer, monthly):
+#   1. restore the newest local snapshot into a test directory and check it
+#      (restore.sh --test: dumps complete, SQLite intact, nothing replaced),
+#   2. off-site: actually read and verify 5 % of the data (restic check).
+# Result: the exit code of the service, shown in the dashboard under Backups.
+set -euo pipefail
+export HOME=/root RESTIC_CACHE_DIR=/var/cache/restic
+bash /opt/keepwatch/modules/backup/restore.sh --test
+set -a
+# shellcheck disable=SC1091
+source /etc/keepwatch/backup/env
+set +a
+if [[ -n ${REMOTE_REPO:-} ]]; then
+  echo "== Off-site: reading and verifying 5 % of the data"
+  restic -r "$REMOTE_REPO" check --read-data-subset=5%
+fi
+echo "Self-test passed."

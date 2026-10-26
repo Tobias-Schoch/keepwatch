@@ -1,0 +1,13 @@
+[Unit]
+Description=Keepwatch image scan: container images checked with Trivy (HIGH and CRITICAL)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-image-scan
+Nice=15
+IOSchedulingClass=idle
+# Trivy runs as a container with its own limit (2 GB); this is just the script.
+TimeoutStartSec=3h

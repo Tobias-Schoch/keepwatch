@@ -1,0 +1,15 @@
+[Unit]
+Description=Keepwatch backup with restic (local and, if set, off-site)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-backup
+# restic and rclone look for cache and configuration under $HOME.
+Environment=HOME=/root
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+Nice=10
+IOSchedulingClass=idle
+# A run must not hang forever and block the next one.
+TimeoutStartSec=4h

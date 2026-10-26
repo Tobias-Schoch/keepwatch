@@ -1,0 +1,47 @@
+# Keepwatch reverse proxy: Nginx Proxy Manager on 80/443 with Let's Encrypt.
+# Installed as /srv/keepwatch/proxy/docker-compose.yml by the proxy module;
+# ports and networks come from .env next to it (written from keepwatch.conf).
+#
+# Apply by hand - the project name is mandatory, without it compose creates
+# new containers NEXT TO the old ones instead of replacing them:
+#   cd /srv/keepwatch/proxy && docker compose -p proxy up -d
+#
+# The proxy is not managed by Portainer on purpose: a tool that restarts the
+# container it reaches you through breaks off mid-way - and taking the proxy
+# down takes every site and the UI to repair it with it.
+
+services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    restart: unless-stopped
+    # Usually ~100 MB. The limit only stops a runaway before it takes the whole server down.
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "-o", "/dev/null", "http://127.0.0.1:81/api/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "80:80"
+      - "443:443"
+      # The admin UI does NOT belong on the internet - it can redirect any
+      # domain and get certificates for it. Through the tunnel only:
+      #   ./keepwatch tunnel   (or ssh -L <port>:127.0.0.1:<port> <server>)
+      - "127.0.0.1:${KW_PROXY_ADMIN_PORT:-9001}:81"
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      # Your sites: the proxy reaches containers on this network by name.
+      - apps
+      # Private network shared only with Portainer (deploy webhooks).
+      - portainer
+
+networks:
+  apps:
+    external: true
+    name: ${KW_PROXY_NETWORK:-proxy-net}
+  portainer:
+    external: true
+    name: proxy-portainer

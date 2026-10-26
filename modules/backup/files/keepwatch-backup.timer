@@ -1,0 +1,14 @@
+[Unit]
+Description=Keepwatch daily backup
+
+[Timer]
+# The real time is in keepwatch-backup.timer.d/schedule.conf: seeded from
+# KW_BACKUP_TIME (in KW_LOCAL_TZ), then changed by the dashboard. Before the
+# automatic updates, so there is a fresh snapshot before every update.
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=10m
+# Catch up on missed runs (server was off) after boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Keepwatch hardening audit with Lynis, weekly at night
+
+[Timer]
+# The module's install script rewrites this from keepwatch.conf (KW_LYNIS_TIME,
+# KW_LOCAL_TZ). Pick a slot before the image scan, the backup and the nightly
+# updates; a run takes a little over 2 minutes.
+OnCalendar=Sun *-*-* 00:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

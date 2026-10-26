@@ -1,0 +1,24 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get install -y -q shellcheck
+          shellcheck -x -S warning keepwatch lib/*.sh modules/*/*.sh $(grep -rlE '^#!/bin/(ba)?sh' modules/*/files)
+      - name: python
+        run: python3 -m py_compile lib/*.py dashboard/server/*.py
+      - name: wizard smoke test
+        run: KW_CONF_FILE=/tmp/kw.conf python3 lib/wizard.py --yes --no-probe --host 203.0.113.10 --preset web
+  dashboard:
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: dashboard/web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: dashboard/web/package-lock.json }
+      - run: npm ci
+      - run: npm run build

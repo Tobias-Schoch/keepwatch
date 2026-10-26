@@ -1,0 +1,8 @@
+[Unit]
+Description=Keepwatch ban history: rebuild the list from fail2ban and the dashboard, then apply it
+After=fail2ban.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-ban-history refresh
+Nice=10

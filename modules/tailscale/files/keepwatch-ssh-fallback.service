@@ -1,0 +1,7 @@
+[Unit]
+Description=Keepwatch SSH fallback: reopen SSH when Tailscale is not running
+After=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-ssh-fallback

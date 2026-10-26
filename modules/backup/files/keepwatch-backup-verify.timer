@@ -1,0 +1,10 @@
+[Unit]
+Description=Keepwatch backup self-test, first Sunday of the month
+
+[Timer]
+# After the backup and the updates; the timezone is added by the backup module.
+OnCalendar=Sun *-*-01..07 05:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

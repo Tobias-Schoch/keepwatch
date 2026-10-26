@@ -1,0 +1,51 @@
+# Keepwatch: /etc/fail2ban/jail.d/keepwatch.local (written by the fail2ban module).
+# The numbers are starting values - the dashboard changes them
+# (Settings -> fail2ban) in zz-keepwatch-dashboard.local, which wins.
+#
+# Strict, because there is no legitimate failed SSH login: passwords are
+# off, and whoever has a key does not fail. Every "failure" is a bot.
+
+[DEFAULT]
+# keepwatch_ignore: this server's own public addresses (its own checks go
+# through its public domains - it must never ban itself) and KW_TRUSTED_IPS.
+# Written on every deploy to jail.d/00-keepwatch-ips.local.
+ignoreip = 127.0.0.1/8 ::1 %(keepwatch_ignore)s
+# Every further ban of the same address doubles (1 week, 2, 4 ...), up to a
+# year. fail2ban remembers offenders in its database (dbpurgeage in
+# fail2ban.d/keepwatch.local).
+bantime.increment = true
+bantime.factor = 1
+bantime.maxtime = 52w
+bantime.overalljails = true
+
+# From the internet: ban on the FIRST failure by default.
+# Ubuntu logs SSH as ssh.service; fail2ban's stock journalmatch looks for
+# sshd.service and silently sees no attack at all - hence the explicit match.
+[sshd]
+enabled      = true
+# aggressive: also counts bots that disconnect before authenticating.
+mode         = aggressive
+backend      = systemd
+journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd + _COMM=sshd-session
+maxretry     = @SSH_MAXRETRY@
+findtime     = 24h
+bantime      = @SSH_BANTIME@
+ignoreip     = 127.0.0.1/8 ::1 %(keepwatch_ignore)s @TAILNET@
+
+# Repeat offenders: 2 bans in 30 days -> a year, on ALL ports (80/443 too).
+# Bans on "all ports" must hit BEFORE Docker: requests to your sites
+# (80/443) are DNATed by Docker, go through FORWARD and never through INPUT,
+# so a ban in INPUT does not stop them. Hence a chain of its own in
+# prerouting before NAT (-150); packets are dropped (reject does not work
+# in prerouting).
+[recidive]
+enabled   = true
+backend   = auto
+logpath   = /var/log/fail2ban.log
+# The chain name as a jail option: fail2ban passes `chain` from the jail to
+# the action, overriding a value in the banaction.
+chain     = f2b-before-docker
+banaction = nftables[type=allports, chain_hook=prerouting, chain_priority=-150, blocktype=drop]
+maxretry  = 2
+findtime  = 30d
+bantime   = 52w

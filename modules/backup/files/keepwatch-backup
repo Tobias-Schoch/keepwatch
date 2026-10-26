@@ -1,0 +1,144 @@
+#!/bin/bash
+# Keepwatch daily backup with restic. Installed as /usr/local/sbin/keepwatch-backup,
+# started by keepwatch-backup.service (timer, KW_BACKUP_TIME) or the dashboard.
+#
+#   1. Running Postgres containers: pg_dumpall as plain SQL. Plain, not -Fc:
+#      restic compresses by itself and can only recognise unchanged parts
+#      in uncompressed dumps.
+#   2. SQLite files: a consistent copy with .backup. Copying a live database
+#      can catch half a transaction.
+#   3. Portainer: portainer.db (BoltDB) copied while the container is paused.
+#   4. restic backup into the local repository, then prune by plan.
+#   5. If an off-site repository is set: restic copy there, prune there as
+#      well. Local is fast to restore from, off-site survives the server.
+#
+# Configuration: /etc/keepwatch/backup/env (retention, repositories,
+# credentials) and KW_BACKUP_PATHS / KW_BACKUP_EXCLUDE in keepwatch.conf.
+set -euo pipefail
+
+KW_BACKUP_PATHS="/etc /root /opt /srv /usr/local/sbin /usr/local/bin /var/lib/docker/volumes /var/lib/keepwatch /var/lib/tailscale"
+KW_BACKUP_EXCLUDE="/root/.cache */node_modules"
+KW_HOSTNAME=$(hostname)
+for f in /opt/keepwatch/keepwatch.conf.example /etc/keepwatch/keepwatch.conf; do
+  # shellcheck disable=SC1090
+  [[ -f $f ]] && source "$f"
+done
+set -a
+# shellcheck disable=SC1091
+source /etc/keepwatch/backup/env
+set +a
+: "${LOCAL_REPO:?LOCAL_REPO missing in /etc/keepwatch/backup/env}"
+STAGE=${STAGE:-/var/backups/keepwatch/stage}
+# The host name in restic: snapshots, forget and the restore all filter by it.
+HOST=${KW_HOSTNAME:-$(hostname)}
+KEEP=(--keep-daily "${KEEP_DAILY:-7}" --keep-weekly "${KEEP_WEEKLY:-4}" --keep-monthly "${KEEP_MONTHLY:-6}")
+KEEP_REMOTE=(--keep-daily "${REMOTE_KEEP_DAILY:-14}" --keep-weekly "${REMOTE_KEEP_WEEKLY:-13}" --keep-monthly "${REMOTE_KEEP_MONTHLY:-24}")
+HAVE_DOCKER=0
+docker info >/dev/null 2>&1 && HAVE_DOCKER=1
+
+log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+rm -rf "$STAGE"
+mkdir -p "$STAGE/postgres" "$STAGE/sqlite" "$STAGE/bolt"
+chmod 700 "$STAGE"
+
+# --- 1. Postgres -------------------------------------------------------------
+EXCLUDES=()
+if (( HAVE_DOCKER )); then
+  while read -r name image; do
+    [[ $image == postgres* || $image == */postgres* ]] || continue
+    log "Postgres $name: pg_dumpall"
+    docker exec "$name" sh -c 'pg_dumpall -U "${POSTGRES_USER:-postgres}"' > "$STAGE/postgres/$name.sql"
+    log "  $(du -h "$STAGE/postgres/$name.sql" | cut -f1)"
+    # The data directory itself is left out: copied while running it is not
+    # reliably restorable, the dump is.
+    src=$(docker inspect "$name" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Source}}{{end}}{{end}}')
+    [[ -n $src ]] && EXCLUDES+=(--exclude "$src")
+  done < <(docker ps --format '{{.Names}} {{.Image}}')
+fi
+
+# --- 2. SQLite ---------------------------------------------------------------
+SQLITE_DIRS=()
+for d in /var/lib/docker/volumes /srv /opt /var/lib/keepwatch; do [[ -d $d ]] && SQLITE_DIRS+=("$d"); done
+while IFS= read -r -d '' f; do
+  [[ $(head -c 15 "$f" 2>/dev/null) == "SQLite format 3" ]] || continue
+  dest="$STAGE/sqlite${f}"
+  mkdir -p "$(dirname "$dest")"
+  if sqlite3 "$f" ".timeout 10000" ".backup '$dest'" 2>/dev/null; then
+    # .backup creates the copy as root - take owner and mode from the
+    # original, or the app cannot write after a restore.
+    chown --reference="$f" "$dest"; chmod --reference="$f" "$dest"
+    log "SQLite $f"
+  else
+    log "SQLite $f: .backup failed, only the raw file is in the backup"
+  fi
+done < <(find "${SQLITE_DIRS[@]}" -xdev -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -size +0 -print0 2>/dev/null)
+
+# --- 3. Portainer ------------------------------------------------------------
+# portainer.db is BoltDB, not SQLite - .backup does not work. Pause Portainer
+# for the copy (well under a second), then it is guaranteed consistent.
+if (( HAVE_DOCKER )); then
+  while read -r name image; do
+    [[ $image == portainer/* ]] || continue
+    src=$(docker inspect "$name" --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}')
+    [[ -f $src/portainer.db ]] || continue
+    dest="$STAGE/bolt$src"
+    mkdir -p "$dest"
+    docker pause "$name" >/dev/null
+    # If the copy fails, Portainer still runs on.
+    trap 'docker unpause '"$name"' >/dev/null 2>&1 || true' EXIT
+    cp -a "$src/portainer.db" "$dest/"
+    docker unpause "$name" >/dev/null
+    trap - EXIT
+    log "Portainer $name: portainer.db copied consistently"
+  done < <(docker ps --format '{{.Names}} {{.Image}}')
+fi
+
+# --- 4. Local ----------------------------------------------------------------
+if ! restic -r "$LOCAL_REPO" cat config >/dev/null 2>&1; then
+  log "Local repository missing, creating it: $LOCAL_REPO"
+  restic -r "$LOCAL_REPO" init
+fi
+
+PATHS=()
+set -f  # exclude patterns like */node_modules are for restic, not for the shell
+for p in $KW_BACKUP_PATHS; do [[ -e $p ]] && PATHS+=("$p"); done
+for p in $KW_BACKUP_EXCLUDE; do EXCLUDES+=(--exclude "$p"); done
+set +f
+log "restic backup -> local"
+restic -r "$LOCAL_REPO" backup --verbose=0 --tag daily --host "$HOST" \
+  --exclude-caches --one-file-system \
+  --exclude '/var/lib/docker/volumes/*/_data/**/*.sock' --exclude "$LOCAL_REPO" \
+  "${EXCLUDES[@]}" "${PATHS[@]}" "$STAGE"
+
+log "Pruning local"
+restic -r "$LOCAL_REPO" forget --prune --host "$HOST" "${KEEP[@]}" --compact
+
+# Check the structure once a week (Sundays).
+if [[ $(date +%u) == 7 ]]; then
+  log "Checking local"
+  restic -r "$LOCAL_REPO" check
+fi
+
+# --- 5. Off-site ---------------------------------------------------------------
+if [[ -n ${REMOTE_REPO:-} ]]; then
+  # Label in the log (the dashboard's timeline reads "-> remote (<name>)").
+  RNAME=${REMOTE_NAME:-${REMOTE_REPO%%:*}}
+  if ! restic -r "$REMOTE_REPO" cat config >/dev/null 2>&1; then
+    log "Remote repository missing, creating it: $REMOTE_REPO"
+    # Same chunker parameters as locally, otherwise copy does not deduplicate.
+    restic -r "$REMOTE_REPO" init --from-repo "$LOCAL_REPO" --copy-chunker-params \
+      --from-password-file "$RESTIC_PASSWORD_FILE"
+  fi
+  log "restic copy -> remote ($RNAME)"
+  restic -r "$REMOTE_REPO" copy --from-repo "$LOCAL_REPO" --from-password-file "$RESTIC_PASSWORD_FILE" --host "$HOST"
+  log "Pruning remote ($RNAME)"
+  restic -r "$REMOTE_REPO" forget --prune --host "$HOST" "${KEEP_REMOTE[@]}"
+  mkdir -p /var/lib/keepwatch/backup
+  date +%s > /var/lib/keepwatch/backup/remote-last-ok
+else
+  log "No off-site repository (REMOTE_REPO empty) - local backup only"
+fi
+
+rm -rf "$STAGE"
+log "Done"

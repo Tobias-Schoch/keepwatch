@@ -1,0 +1,11 @@
+[Unit]
+Description=Keepwatch backup self-test (test restore + off-site sample)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-backup-verify
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=3h
