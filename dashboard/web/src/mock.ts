@@ -192,7 +192,7 @@ const ENV: Record<number, EnvVar[]> = {
     { name: "POSTGRES_USER", value: "shop" },
     { name: "POSTGRES_PASSWORD", value: "x9Qe-3vLk-PmRt-77aa" },
     { name: "POSTGRES_DB", value: "shop" },
-    { name: "PAYMENT_API_KEY", value: "sk_test_4eC39HqLyjWDarjtT1zdp7dc" },
+    { name: "PAYMENT_API_KEY", value: "example-not-a-real-key" },
     { name: "SMTP_HOST", value: "smtp.example.com" },
     { name: "IMAGE_TAG", value: "latest" },
   ],
@@ -763,7 +763,7 @@ export async function mockRequest(method: string, path: string, body: unknown): 
       settings.ssh.revertAt = null;
       return { ok: true };
     }
-    if (p === "/api/settings/backup/password") return { password: "kV9p-2Qx7-mT4e-Hr8w-Zb3n-6Lf1" };
+    if (p === "/api/settings/backup/password") return { password: "example-password-not-real" };
     if (p === "/api/settings/remote/test") {
       if (!settings.remote.configured) throw new Error("No off-site repository is set up.");
       await wait(1200);
