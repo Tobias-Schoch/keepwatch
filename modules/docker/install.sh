@@ -11,20 +11,47 @@ if ! command -v docker >/dev/null; then
   need docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   FRESH=1
 elif ! docker compose version >/dev/null 2>&1; then
-  warn "docker is installed but without the compose plugin - install docker-compose-plugin (or docker-compose-v2 for Ubuntu's docker.io)"
+  # An existing Docker without compose (often Ubuntu's docker.io): the proxy
+  # and Portainer need it - add the plugin that belongs to that Docker.
+  if dpkg-query -W -f='${Status}' docker.io 2>/dev/null | grep -q "ok installed"; then PLUGIN=docker-compose-v2; else PLUGIN=docker-compose-plugin; fi
+  need "$PLUGIN" || true
+  docker compose version >/dev/null 2>&1 \
+    || warn "docker is installed but without the compose plugin, and $PLUGIN could not be installed - install it yourself (apt install $PLUGIN)"
 fi
 
-# json-file logs rotated at 3 x 10 MB per container (the log-archive module
-# keeps them longer, outside Docker). live-restore: containers keep running
-# while dockerd restarts (updates). Address pools: /24 networks from 10/8
-# instead of a /16 per network from 172.17-31 - room for many stacks.
-# An existing daemon.json from before Keepwatch is kept next to it, once.
-if [[ -s /etc/docker/daemon.json && ! -e $KW_STATE/docker-daemon-json ]] && ! cmp -s "$F/daemon.json" /etc/docker/daemon.json; then
+# Keepwatch's settings are MERGED into daemon.json - everything else you or
+# your provider set there (data-root, dns, mtu, registry-mirrors, runtimes,
+# userns-remap, ...) stays as it is.
+#   log-driver/log-opts  json-file rotated at 3 x 10 MB per container (the
+#                        log-archive module keeps them longer, outside Docker)
+#   live-restore         containers keep running while dockerd restarts (updates)
+#   default-address-pools only with KW_DOCKER_ADDRESS_POOL, and only if neither
+#                        it nor bip is set already. Docker's own defaults
+#                        (172.17-31.0.0/16, 192.168.0.0/16 in /20s) are safe;
+#                        a pool from 10.0.0.0/8 would collide with the private
+#                        networks of many providers (Hetzner, DigitalOcean, Oracle).
+# The original file is kept once as daemon.json.before-keepwatch.
+if [[ -s /etc/docker/daemon.json && ! -e /etc/docker/daemon.json.before-keepwatch ]]; then
   cp -a /etc/docker/daemon.json /etc/docker/daemon.json.before-keepwatch
-  warn "replaced your /etc/docker/daemon.json - the old one is /etc/docker/daemon.json.before-keepwatch"
 fi
-put "$F/daemon.json" /etc/docker/daemon.json
-touch "$KW_STATE/docker-daemon-json"
+MERGED=$(python3 - "$F/daemon.json" /etc/docker/daemon.json "${KW_DOCKER_ADDRESS_POOL:-}" <<'PY2'
+import json, sys
+ours = json.load(open(sys.argv[1]))
+try:
+    cur = json.load(open(sys.argv[2]))
+except FileNotFoundError:
+    cur = {}
+except ValueError as e:
+    sys.exit(f"/etc/docker/daemon.json is not valid JSON ({e}) - fix it first")
+cur.update(ours)
+pool = sys.argv[3].strip()
+if pool and "default-address-pools" not in cur and "bip" not in cur:
+    base, _, size = pool.partition("@")
+    cur["default-address-pools"] = [{"base": base, "size": int(size or 24)}]
+print(json.dumps(cur, indent=2))
+PY2
+) || { warn "docker: $MERGED"; MERGED=""; }
+[[ -z $MERGED ]] || write /etc/docker/daemon.json <<<"$MERGED"
 systemctl enable -q --now docker
 if changed /etc/docker/; then
   if (( FRESH )); then

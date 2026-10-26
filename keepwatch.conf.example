@@ -42,7 +42,7 @@ KW_PUBLIC_UDP=""                # UDP ports containers may receive from the inte
 
 # --- fail2ban -------------------------------------------------------------------
 KW_F2B_SSH_BANTIME="1w"         # first ban; repeat offenders get doubled up to a year
-KW_F2B_SSH_MAXRETRY="1"         # failed SSH logins from the internet before a ban (keys only: every failure is a bot)
+KW_F2B_SSH_MAXRETRY="7"         # failed SSH logins in 24 h before a ban (internet and tailnet); 1 = strict
 KW_F2B_WEB_SCANNER="yes"        # ban clients probing for .env, .git, wp-login, ... (needs proxy)
 KW_F2B_APP_LOGIN="yes"          # ban after 5 failed logins (401/403 on login/admin paths) in 1 h (needs proxy)
 
@@ -54,6 +54,7 @@ KW_BANHISTORY_SPARE_BELOW="100" # ... with fewer attempts than this
 # --- docker -----------------------------------------------------------------------
 KW_PROXY_NETWORK="proxy-net"    # shared network: the proxy reaches your containers by name
 KW_DOCKER_NETWORKS=""           # more networks to create, space separated
+KW_DOCKER_ADDRESS_POOL=""       # optional "base@size", e.g. "10.200.0.0/16@24" (many small networks, pick a range your provider does not use); empty = Docker's default
 
 # --- backup -----------------------------------------------------------------------
 KW_BACKUP_TIME="03:00"

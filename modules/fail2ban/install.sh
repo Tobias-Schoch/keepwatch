@@ -1,4 +1,4 @@
-# fail2ban: bans SSH brute force on the first try, web scanners and repeated
+# fail2ban: bans SSH brute force (KW_F2B_SSH_MAXRETRY failures), web scanners and repeated
 # failed logins on your sites - before Docker sees the packet.
 need fail2ban python3-systemd nftables
 
@@ -7,18 +7,32 @@ JD=/etc/fail2ban/jail.d
 # checks go through its public domains). Detected, not hard-coded - a new
 # server has other addresses. Plus KW_TRUSTED_IPS.
 OWN=$(ip -o addr show scope global | awk '$2 !~ /^(docker|br-|veth|tailscale)/ {split($4, a, "/"); print a[1]}' | sort -u | tr '\n' ' ')
+# The address this deploy comes from is never banned either: a typo in
+# your own ssh command must not lock you out of the server you just set up.
+# Only the latest one (rewritten on every deploy); tailnet addresses are
+# handled by the tailscale jail anyway.
+DEPLOY_IP=$(deploy_client_ip)
+case $DEPLOY_IP in 100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*|fd7a:115c:a1e0:*) DEPLOY_IP="" ;; esac
 # shellcheck disable=SC2086,SC2116 # joins the words
 IGNORE=$(echo $OWN $KW_TRUSTED_IPS)
 write "$JD/00-keepwatch-ips.local" <<CONF
 # Written by Keepwatch on every deploy - do not edit (set KW_TRUSTED_IPS instead).
+# keepwatch_ignore: this server's own addresses and KW_TRUSTED_IPS.
+# deploy_ip: the address of the most recent ./keepwatch deploy.
+# Every jail ignores both, recidive (a year on all ports) included.
 [DEFAULT]
-keepwatch_ignore = $IGNORE
+deploy_ip = $DEPLOY_IP
+keepwatch_ignore = $IGNORE %(deploy_ip)s
 CONF
 
+# The port(s) sshd really listens on - a custom port must be what gets banned.
+install -d -m 755 /run/sshd
+SSH_PORT=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -un | paste -sd, -)
+SSH_PORT=${SSH_PORT:-22}
 TAILNET=""
 enabled tailscale && TAILNET="100.64.0.0/10 fd7a:115c:a1e0::/48"
 jail() {  # jail <file in files/> <target>: fill in the placeholders
-  sed -e "s|@SSH_BANTIME@|$KW_F2B_SSH_BANTIME|g" -e "s|@SSH_MAXRETRY@|$KW_F2B_SSH_MAXRETRY|g" \
+  sed -e "s|@SSH_BANTIME@|$KW_F2B_SSH_BANTIME|g" -e "s|@SSH_MAXRETRY@|$KW_F2B_SSH_MAXRETRY|g" -e "s|@SSH_PORT@|$SSH_PORT|g" \
       -e "s|@TAILNET@|$TAILNET|g" -e "s|@LOGS@|$PROXY_LOGS|g" "$F/$1" | write "$JD/$2"
 }
 drop() {  # drop <target>: remove a jail file whose module is off

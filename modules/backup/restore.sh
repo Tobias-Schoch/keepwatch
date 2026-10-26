@@ -3,7 +3,7 @@
 # proxy and Portainer with their data and certificates, Docker volumes,
 # Portainer stacks and their Postgres databases.
 #
-#   new server (from your computer):  ./keepwatch deploy --restore
+#   new server (from your computer):  ./keepwatch deploy --fresh
 #   by hand, on the server:           bash /opt/keepwatch/modules/backup/restore.sh
 #   test only (changes nothing):      bash /opt/keepwatch/modules/backup/restore.sh --test
 #
@@ -15,19 +15,20 @@
 #   --test            restore into /var/restore-test and check it, replace nothing
 #   --snapshot <id>   instead of the newest snapshot
 #   --stacks-only     leave the data alone, only redeploy the Portainer stacks
-#   --force           even if containers are running already (overwrites their data!)
+#   --yes             do not ask before replacing data that is already on this server
+#                     (deploy --fresh passes it; --force is the same)
 set -euo pipefail
 export LC_ALL=C.UTF-8 LANG=C.UTF-8 HOME=/root RESTIC_CACHE_DIR=/var/cache/restic
 
 KW_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BK=/etc/keepwatch/backup
-TEST=0 SNAP=latest ONLY_STACKS=0 FORCE=0
+TEST=0 SNAP=latest ONLY_STACKS=0 YES=0
 while (( $# )); do
   case $1 in
     --test) TEST=1 ;;
     --snapshot) SNAP=$2; shift ;;
     --stacks-only) ONLY_STACKS=1 ;;
-    --force) FORCE=1 ;;
+    --yes|--force) YES=1 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -180,8 +181,21 @@ fi
 TARGET=/var/restore
 (( TEST )) && TARGET=/var/restore-test
 
-if (( ! TEST && ! FORCE )) && [[ -n $(docker ps -q 2>/dev/null) ]]; then
-  abort "Containers are running here - this is not a fresh server. To check the backup: --test, to overwrite: --force"
+# Anything here that the restore would overwrite? Then only with consent.
+if (( ! TEST && ! YES )); then
+  HAVE=()
+  [[ -n $(docker ps -q 2>/dev/null) ]] && HAVE+=("running containers")
+  [[ -n $(docker volume ls -q 2>/dev/null) ]] && HAVE+=("Docker volumes")
+  [[ -n $(find /srv -mindepth 1 -maxdepth 3 -type f 2>/dev/null | head -1) ]] && HAVE+=("files under /srv")
+  [[ -n $(find /opt -mindepth 1 -maxdepth 1 ! -name keepwatch 2>/dev/null | head -1) ]] && HAVE+=("files under /opt")
+  if (( ${#HAVE[@]} )); then
+    list=$(IFS=,; echo "${HAVE[*]}")
+    echo "  This server already has data: ${list//,/, }."
+    echo "  The restore replaces it with the snapshot (secrets, /root, /opt, /srv, volumes, databases)."
+    [[ -t 0 ]] || abort "not a fresh server - run it from a terminal to confirm, or pass --yes. To only check the backup: --test"
+    read -rp "  Replace it with snapshot $SNAP? [y/N] " answer
+    [[ $answer == [yY]* ]] || abort "cancelled - nothing changed"
+  fi
 fi
 
 step "Restoring snapshot $SNAP to $TARGET"
@@ -272,13 +286,24 @@ fi
 [[ -d $TARGET/var/lib/keepwatch ]] && rsync -a "$TARGET/var/lib/keepwatch/" /var/lib/keepwatch/
 echo "  ok"
 
-if command -v docker >/dev/null && [[ -d $TARGET/var/lib/docker/volumes ]]; then
+# Where the volumes were (backups before this file existed: the default) and
+# where Docker keeps them on this server (daemon.json "data-root" may differ).
+OLD_ROOT=$(cat "$STAGE/docker-root" 2>/dev/null || echo /var/lib/docker)
+NEW_ROOT=/var/lib/docker
+if command -v docker >/dev/null; then
+  NEW_ROOT=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)
+  [[ -n $NEW_ROOT ]] || NEW_ROOT=$(python3 -c 'import json; print(json.load(open("/etc/docker/daemon.json")).get("data-root", ""))' 2>/dev/null || true)
+  [[ -n $NEW_ROOT ]] || NEW_ROOT=/var/lib/docker
+fi
+if command -v docker >/dev/null && [[ -d $TARGET$OLD_ROOT/volumes ]]; then
   step "Docker volumes"
   systemctl stop docker.socket docker
-  rsync -a "$TARGET/var/lib/docker/volumes/" /var/lib/docker/volumes/
+  mkdir -p "$NEW_ROOT/volumes"
+  rsync -a "$TARGET$OLD_ROOT/volumes/" "$NEW_ROOT/volumes/"
+  [[ $OLD_ROOT == "$NEW_ROOT" ]] || echo "  volumes moved from $OLD_ROOT to $NEW_ROOT (this server's Docker data-root)"
   # Data directories of running Postgres containers are not in the backup
   # (the dump is). Docker still needs the empty directory.
-  for v in /var/lib/docker/volumes/*/; do mkdir -p "$v/_data"; done
+  for v in "$NEW_ROOT"/volumes/*/; do mkdir -p "$v/_data"; done
   systemctl start docker
   systemctl restart keepwatch-firewall 2>/dev/null || true
   echo "  ok"
@@ -288,7 +313,9 @@ for d in sqlite bolt; do
   [[ -d $STAGE/$d ]] || continue
   # Keep the owner of the raw file: the copies were made as root.
   (cd "$STAGE/$d" && find . -type f -print0 | while IFS= read -r -d '' f; do
-    t="/${f#./}"; o=$(stat -c %u:%g "$t" 2>/dev/null || true)
+    t="/${f#./}"
+    [[ $t == "$OLD_ROOT"/volumes/* ]] && t="$NEW_ROOT/volumes/${t#"$OLD_ROOT"/volumes/}"
+    o=$(stat -c %u:%g "$t" 2>/dev/null || true)
     mkdir -p "$(dirname "$t")"
     cp -a "$f" "$t"; if [[ -n $o ]]; then chown "$o" "$t"; fi
   done)

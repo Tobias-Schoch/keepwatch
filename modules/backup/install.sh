@@ -8,7 +8,11 @@ install -d -m 700 "$BK" /var/backups/keepwatch /var/cache/restic "$KW_STATE/back
 # Ubuntu 22.04 ships 0.12 - then the official release binary goes to
 # /usr/local/bin (before /usr/bin in PATH), checked against its SHA256SUMS.
 RESTIC_VERSION=0.17.3
-if dpkg --compare-versions "$(restic version 2>/dev/null | awk '{print $2}')" lt 0.14; then
+RV=$(restic version 2>/dev/null | awk '{print $2}' || true)
+if [[ -z $RV ]]; then
+  warn "restic is installed but does not run ('restic version' failed)"
+elif dpkg --compare-versions "$RV" lt 0.14; then
+  need bzip2
   ARCH=$(dpkg --print-architecture)
   TMPD=$(mktemp -d)
   URL=https://github.com/restic/restic/releases/download/v$RESTIC_VERSION
@@ -98,7 +102,8 @@ case $REMOTE in
     # host key must be known (a timer cannot answer the question).
     [[ -f /root/.ssh/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N "" -C "keepwatch-backup@$KW_HOSTNAME" -f /root/.ssh/id_ed25519
     TARGET=${REMOTE#sftp:}; TARGET=${TARGET%%:*}; TARGET=${TARGET#//}; TARGET=${TARGET%%/*}
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$TARGET" true 2>/dev/null; then
+    # An sftp session, not a shell command: storage boxes often allow sftp only.
+    if ! echo pwd | sftp -b - -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$TARGET" >/dev/null 2>&1; then
       warn "backup: $TARGET does not accept root's key yet - add this line to its authorized_keys: $(cat /root/.ssh/id_ed25519.pub)"
     fi ;;
   rclone:*)
@@ -143,7 +148,7 @@ seed_text /etc/systemd/system/keepwatch-backup.timer.d/schedule.conf <<CONF
 OnCalendar=
 OnCalendar=$(calendar "$KW_BACKUP_TIME")
 CONF
-TZV=${KW_LOCAL_TZ:-Etc/UTC}; [[ -f /usr/share/zoneinfo/$TZV ]] || TZV=Etc/UTC
+TZV=${KW_LOCAL_TZ:-UTC}; [[ -f /usr/share/zoneinfo/$TZV ]] || TZV=UTC
 sed "s|^OnCalendar=.*|& $TZV|" "$F/keepwatch-backup-verify.timer" | write /etc/systemd/system/keepwatch-backup-verify.timer
 unit_on keepwatch-backup.timer keepwatch-backup-verify.timer
 changed /etc/systemd/system/keepwatch-backup.timer && systemctl restart keepwatch-backup.timer  # also the .d drop-in

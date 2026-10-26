@@ -52,7 +52,11 @@ esac
 # --- Which modules, in which order -----------------------------------------
 meta() { (source "$KW_ROOT/modules/$1/module.conf"; eval "printf '%s' \"\$$2\""); }
 ALL=$(for d in "$KW_ROOT"/modules/*/; do m=$(basename "$d"); printf '%s %s\n' "$(meta "$m" ORDER)" "$m"; done | sort -n | awk '{print $2}')
-KW_MODULES=" base ${KW_MODULES//base/} "
+# Word by word: a substring replacement would also cut "base" out of other names.
+_mods=" base "
+for m in $KW_MODULES; do [[ $m == base || $_mods == *" $m "* ]] || _mods+="$m "; done
+KW_MODULES=$_mods
+unset _mods
 for m in $KW_MODULES; do
   [[ -d $KW_ROOT/modules/$m ]] || { echo "Unknown module in KW_MODULES: $m (see ./keepwatch modules)" >&2; exit 1; }
   for r in $(meta "$m" REQUIRES); do
@@ -64,6 +68,19 @@ PREVIOUS=" $(cat "$KW_STATE/modules" 2>/dev/null | tr '\n' ' ' || true) "
 # shellcheck disable=SC2086 # one module per word
 REMOVE=$(printf '%s\n' $PREVIOUS | tac | while read -r m; do [[ -n $m ]] && ! enabled "$m" && [[ -d $KW_ROOT/modules/$m ]] && echo "$m"; done || true)
 RUN=$(for m in $ALL; do enabled "$m" && [[ -z $ONLY || $ONLY == *" $m "* ]] && echo "$m"; done || true)
+
+if (( ! DRY )); then
+  # A fresh cloud server may still be installing packages from cloud-init
+  # (and holding the apt lock) right after the first boot.
+  if command -v cloud-init >/dev/null; then
+    timeout 600 cloud-init status --wait >/dev/null 2>&1 || true
+  fi
+  # An interrupted dpkg run (e.g. a reboot during updates) blocks every apt call.
+  if [[ -n $(dpkg --audit 2>/dev/null) ]]; then
+    echo "  dpkg was interrupted earlier - finishing it first (dpkg --configure -a)"
+    dpkg --configure -a >/dev/null 2>&1 || warn "dpkg --configure -a failed - check: dpkg --audit"
+  fi
+fi
 
 if (( DRY )); then
   echo "would apply:  $(tr '\n' ' ' <<<"$RUN")"

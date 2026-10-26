@@ -2,8 +2,10 @@
 # The numbers are starting values - the dashboard changes them
 # (Settings -> fail2ban) in zz-keepwatch-dashboard.local, which wins.
 #
-# Strict, because there is no legitimate failed SSH login: passwords are
-# off, and whoever has a key does not fail. Every "failure" is a bot.
+# Passwords are off, so whoever has a key does not fail - but agents that
+# offer several keys and typos do produce failures. KW_F2B_SSH_MAXRETRY
+# (default 7 in 24 h) leaves room for that and still stops brute force
+# long before it matters; 1 bans on the first failure (strict).
 
 [DEFAULT]
 # keepwatch_ignore: this server's own public addresses (its own checks go
@@ -18,7 +20,7 @@ bantime.factor = 1
 bantime.maxtime = 52w
 bantime.overalljails = true
 
-# From the internet: ban on the FIRST failure by default.
+# From the internet: KW_F2B_SSH_MAXRETRY failures in 24 h -> banned.
 # Ubuntu logs SSH as ssh.service; fail2ban's stock journalmatch looks for
 # sshd.service and silently sees no attack at all - hence the explicit match.
 [sshd]
@@ -27,6 +29,8 @@ enabled      = true
 mode         = aggressive
 backend      = systemd
 journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd + _COMM=sshd-session
+# The port(s) sshd really listens on (sshd -T) - "ssh" would mean 22 only.
+port         = @SSH_PORT@
 maxretry     = @SSH_MAXRETRY@
 findtime     = 24h
 bantime      = @SSH_BANTIME@

@@ -35,12 +35,20 @@ KEEP=(--keep-daily "${KEEP_DAILY:-7}" --keep-weekly "${KEEP_WEEKLY:-4}" --keep-m
 KEEP_REMOTE=(--keep-daily "${REMOTE_KEEP_DAILY:-14}" --keep-weekly "${REMOTE_KEEP_WEEKLY:-13}" --keep-monthly "${REMOTE_KEEP_MONTHLY:-24}")
 HAVE_DOCKER=0
 docker info >/dev/null 2>&1 && HAVE_DOCKER=1
+# Docker's data-root can be moved (daemon.json "data-root", e.g. to an extra
+# disk) - back up the volumes where they really are.
+DOCKER_ROOT=/var/lib/docker
+if (( HAVE_DOCKER )); then DOCKER_ROOT=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker); fi
+VOLUMES=$DOCKER_ROOT/volumes
+KW_BACKUP_PATHS=" $KW_BACKUP_PATHS "
+KW_BACKUP_PATHS=${KW_BACKUP_PATHS// \/var\/lib\/docker\/volumes / $VOLUMES }
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/postgres" "$STAGE/sqlite" "$STAGE/bolt"
 chmod 700 "$STAGE"
+echo "$DOCKER_ROOT" > "$STAGE/docker-root"  # the restore needs to know where the volumes were
 
 # --- 1. Postgres -------------------------------------------------------------
 EXCLUDES=()
@@ -59,7 +67,7 @@ fi
 
 # --- 2. SQLite ---------------------------------------------------------------
 SQLITE_DIRS=()
-for d in /var/lib/docker/volumes /srv /opt /var/lib/keepwatch; do [[ -d $d ]] && SQLITE_DIRS+=("$d"); done
+for d in "$VOLUMES" /srv /opt /var/lib/keepwatch; do [[ -d $d ]] && SQLITE_DIRS+=("$d"); done
 while IFS= read -r -d '' f; do
   [[ $(head -c 15 "$f" 2>/dev/null) == "SQLite format 3" ]] || continue
   dest="$STAGE/sqlite${f}"
@@ -108,7 +116,7 @@ set +f
 log "restic backup -> local"
 restic -r "$LOCAL_REPO" backup --verbose=0 --tag daily --host "$HOST" \
   --exclude-caches --one-file-system \
-  --exclude '/var/lib/docker/volumes/*/_data/**/*.sock' --exclude "$LOCAL_REPO" \
+  --exclude "$VOLUMES/*/_data/**/*.sock" --exclude "$LOCAL_REPO" \
   "${EXCLUDES[@]}" "${PATHS[@]}" "$STAGE"
 
 log "Pruning local"

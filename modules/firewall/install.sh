@@ -20,7 +20,12 @@ if [[ $KW_SSH_PUBLIC == no ]]; then
   if enabled tailscale; then CLOSE=1; else warn "KW_SSH_PUBLIC=no needs the tailscale module - SSH stays open to the internet"; fi
 fi
 PENDING="# KEEPWATCH_PENDING_CLOSE=1 (KW_SSH_PUBLIC=no, waiting for Tailscale to be connected)"
-if [[ ! -f $ENV ]] || grep -q '^# KEEPWATCH_PENDING_CLOSE' "$ENV"; then
+# A changed KW_SSH_PUBLIC (since the last deploy) is applied again; an
+# unchanged one leaves what the dashboard set alone.
+SEEN_FILE=$KW_STATE/ssh-public
+SEEN=$(cat "$SEEN_FILE" 2>/dev/null || echo yes)
+[[ ${KW_SSH_PUBLIC:-yes} == no ]] && WANT=no || WANT=yes
+if [[ ! -f $ENV ]] || grep -q '^# KEEPWATCH_PENDING_CLOSE' "$ENV" || [[ $WANT != "$SEEN" ]]; then
   if (( CLOSE )) && ts_running; then
     env_write no
     echo "  SSH closed to the internet - from now on only over Tailscale"
@@ -34,6 +39,20 @@ if [[ ! -f $ENV ]] || grep -q '^# KEEPWATCH_PENDING_CLOSE' "$ENV"; then
 elif grep -q '^SSH_PUBLIC=no' "$ENV" && ! enabled tailscale; then
   env_write yes
   warn "SSH reopened to the internet: it was closed, but the tailscale module is off"
+fi
+mkdir -p "$KW_STATE"; echo "$WANT" > "$SEEN_FILE"
+
+# The proxy serves 80/443 - closed ports would make every site unreachable.
+if enabled proxy; then
+  for p in 80 443; do
+    [[ " $KW_PUBLIC_TCP " == *" $p "* ]] || warn "the proxy module is on, but port $p is not in KW_PUBLIC_TCP - your sites are unreachable from the internet"
+  done
+fi
+
+# ufw is left alone, but its rules still apply on top of these: a port ufw
+# does not allow stays closed even when it is in KW_PUBLIC_TCP.
+if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "^Status: active"; then
+  warn "ufw is active as well - it still blocks whatever it does not allow; Keepwatch's firewall covers everything ufw does and Docker's ports too: consider 'ufw disable'"
 fi
 
 put "$F/keepwatch-firewall" /usr/local/sbin/keepwatch-firewall 755
@@ -49,10 +68,14 @@ systemctl enable -q keepwatch-firewall
 # Restarting is gapless (new rules first, then the old ones out).
 if changed /usr/local/sbin/keepwatch-firewall || changed /etc/systemd/system/keepwatch-firewall \
    || changed "$ENV" || changed "$KW_ETC/keepwatch.conf" || ! systemctl is-active -q keepwatch-firewall; then
+  FW_SINCE=$(date +%s)
   if ! systemctl restart keepwatch-firewall; then
     warn "keepwatch-firewall failed: $(journalctl -u keepwatch-firewall -n 3 --no-pager -o cat 2>/dev/null | tail -1 || true)"
   fi
 fi
-journalctl -u keepwatch-firewall -n 20 -o cat --no-pager 2>/dev/null | grep "firewall set" | tail -1 | sed 's/^/  /' || true
+# What the script reported on this start (or the last one).
+journalctl -u keepwatch-firewall ${FW_SINCE:+--since "@$FW_SINCE"} -n 20 -o cat --no-pager 2>/dev/null \
+  | grep -E "firewall set|^note:" | tail -3 | sed 's/^/  /' || true
+unset FW_SINCE
 unset -f ts_running env_write
 echo "  ok"

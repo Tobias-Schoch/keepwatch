@@ -3,7 +3,7 @@
 
 # Only what several modules use. Everything else is installed by the module
 # that needs it.
-need ca-certificates curl gnupg jq rsync openssl python3 sqlite3 ncdu nftables
+need ca-certificates curl gnupg jq rsync openssl python3 sqlite3 ncdu nftables tzdata
 
 # The system clock stays in KW_TIMEZONE (UTC by default: logs stay
 # unambiguous); schedules use KW_LOCAL_TZ through the OnCalendar timezone suffix.

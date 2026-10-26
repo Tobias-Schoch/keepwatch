@@ -122,12 +122,22 @@ if changed "$CUSTOM/" && [[ -n $C ]]; then
 fi
 
 # Idempotent: compose only recreates containers whose definition changed.
-if OUT=$(cd "$P" && docker compose -p proxy up -d --quiet-pull --remove-orphans 2>&1); then
+# Something else on 80/443 (a host nginx, apache, caddy)? Then the proxy
+# cannot start - say so clearly instead of a Docker error.
+BUSY=""
+if [[ -z $C ]]; then
+  BUSY=$(ss -tlnpH 2>/dev/null | awk '$4 ~ /:(80|443)$/' | grep -v docker-proxy | sed -E 's/.*users:\(\("([^"]+)".*/\1/' | sort -u | tr '\n' ' ' || true)
+fi
+STARTED=0
+if [[ -n $BUSY ]]; then
+  warn "proxy not started: ports 80/443 are used by: $BUSY- stop and disable it (e.g. systemctl disable --now nginx), then deploy again"
+elif OUT=$(cd "$P" && docker compose -p proxy up -d --quiet-pull --remove-orphans 2>&1); then
+  STARTED=1
   grep -vE "Running|up-to-date|Pulling|Pulled|Creating|Starting|Waiting" <<<"$OUT" | sed 's/^/  /' || true
 else
   warn "proxy: docker compose up failed: $(tail -2 <<<"$OUT" | tr '\n' ' ' | cut -c1-300)"
 fi
-if [[ -z $C && $FRESH_PROXY == 1 ]]; then
+if (( STARTED )) && [[ -z $C && $FRESH_PROXY == 1 ]]; then
   echo "  first start: open the admin UI through the tunnel (./keepwatch tunnel -> http://localhost:$((10000 + KW_PROXY_ADMIN_PORT)))"
   echo "  and create the admin account right away (older images: admin@example.com / changeme - change it)"
 fi

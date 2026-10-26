@@ -96,6 +96,16 @@ for T in iptables ip6tables; do
     $T -I INPUT 1 -i "$IFACE" -p tcp -m multiport --dports "$SSH_LIST" -m conntrack --ctstate NEW \
       -m limit --limit 60/min --limit-burst 120 -m comment --comment keepwatch -j LOG --log-prefix ssh-closed: --log-level 6
   fi
+  # A catch-all REJECT/DROP further down INPUT (Oracle Cloud's stock
+  # iptables rules, netfilter-persistent) would still block the public
+  # ports: then accept them explicitly, right after Keepwatch's DROP.
+  # The other rules (and their file) stay as they are.
+  if [ -n "$TCP_LIST" ] && $T -S INPUT | grep -qE '^-A INPUT( -i [^ ]+)? -j (REJECT|DROP)( |$)'; then
+    if [ "$SSH_PUBLIC" = no ]; then POS=3; else POS=2; fi
+    $T -I INPUT "$POS" -i "$IFACE" -p tcp -m conntrack --ctstate NEW -m multiport --dports "$TCP_LIST" \
+      -m comment --comment keepwatch -j ACCEPT
+    echo "note: INPUT has a reject-all rule (e.g. Oracle Cloud's stock iptables) - the public ports ($T) are accepted before it"
+  fi
   while IFS= read -r rule; do
     [ -n "$rule" ] || continue
     # eval: -S prints the LOG prefix in quotes ("ssh-closed:"); the spec

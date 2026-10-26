@@ -9,7 +9,7 @@ filter   = keepwatch-ssh-closed
 # rsyslog also writes them to kern.log.
 backend  = auto
 logpath  = /var/log/kern.log
-port     = ssh
+port     = @SSH_PORT@
 maxretry = 1
 findtime = 24h
 bantime  = @SSH_BANTIME@

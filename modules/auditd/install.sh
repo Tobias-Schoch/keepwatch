@@ -7,6 +7,9 @@ put "$F/keepwatch.rules" /etc/audit/rules.d/keepwatch.rules 640
 if systemctl enable -q --now auditd 2>/dev/null && sleep 1 && systemctl is-active -q auditd; then
   if changed /etc/audit/; then augenrules --load >/dev/null || warn "auditd: augenrules --load failed"; fi
 else
+  # Disabled again, so a kernel without audit does not leave a failed unit behind.
+  systemctl disable -q --now auditd 2>/dev/null || true
+  systemctl reset-failed auditd 2>/dev/null || true
   warn "auditd does not start on this kernel (container or audit disabled) - no audit log"
 fi
 echo "  ok"
