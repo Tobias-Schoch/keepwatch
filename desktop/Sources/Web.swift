@@ -209,7 +209,7 @@ final class Web: NSObject {
     /// to its own port on the server) and `http(s)://<host>:<remote port>` -> http://localhost:<local port>.
     private func fixed(_ url: URL) -> URL {
         guard let port = url.port, Ports.remote(forLocal: port) == nil, Ports.remote.contains(port),
-              Ports.isLocal(url) || (!Server.host.isEmpty && url.host == Server.host),
+              Ports.isLocal(url) || (!Server.host.isEmpty && AppConfig.normalizeHost(url.host ?? "") == Server.host),
               var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         c.scheme = "http"
         c.host = Ports.host

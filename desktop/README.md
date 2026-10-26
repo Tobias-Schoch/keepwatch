@@ -66,7 +66,7 @@ picks the file up by itself once it appears. You can also enter host and user by
 
 | Key | Meaning |
 |---|---|
-| `host` | IP or DNS name of the server (with Tailscale: its MagicDNS name). From `KW_HOST`. Required. |
+| `host` | IP or DNS name of the server (with Tailscale: its MagicDNS name). From `KW_HOST`. Required. IPv6 works with or without brackets (`2001:db8::1` or `[2001:db8::1]`): ssh gets it bare, restic's sftp URL gets `user@[2001:db8::1]`. |
 | `user`, `sshPort` | SSH login. From `KW_SSH_USER`, `KW_SSH_PORT`. Default `root`, `22`. |
 | `requireTailscale` | `true` when the `tailscale` module is enabled: the app checks Tailscale on this Mac, starts it if needed, and does not try SSH while it is off. `false`: plain SSH, no Tailscale checks at all. |
 | `uis` | Admin UIs on the server's 127.0.0.1, one tab each. **The first entry is the dashboard** (`KW_DASHBOARD_PORT`). Then Portainer (`KW_PORTAINER_PORT`) and Proxy Manager (`KW_PROXY_ADMIN_PORT`) if those modules are enabled, then `KW_EXTRA_UIS` ("Name=port ..."). `path` is an optional start page. |
@@ -83,14 +83,16 @@ The app starts:
 
 ```
 /usr/bin/ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3
-  -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o ControlMaster=no -o ControlPath=none
+  -o BatchMode=yes -o PreferredAuthentications=publickey -o IdentitiesOnly=no
+  -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o ControlMaster=no -o ControlPath=none
   -o Tag=keepwatch-desktop-tunnel
   -L 19004:127.0.0.1:9004 -L 19002:127.0.0.1:9002 -L 19001:127.0.0.1:9001 ...
   [-p <sshPort>] -- <user>@<host>
 ```
 
 - **Keys:** whatever ssh uses anyway: `~/.ssh`, the ssh-agent / macOS keychain, an `IdentityAgent`
-  such as 1Password. Your `~/.ssh/config` applies. The app has no keys of its own.
+  such as 1Password. Your `~/.ssh/config` applies. The app has no keys of its own and never asks for a
+  passphrase: a key with a passphrase must be in the agent (`ssh-add --apple-use-keychain ~/.ssh/<key>`).
 - **Ports:** local port = 10000 + remote port (9004 -> 19004; remote ports above 54635 map to
   remote - 10000). If any of them is busy (another service, a second copy of the app), all of them
   move by 100 (19104, 19102 ...), then 200, up to 900. Free means nobody accepts connections there
@@ -102,10 +104,23 @@ The app starts:
   and reconnects at most every 2 minutes. Network errors before the login are retried after
   3, 5, 10, 20, 30, 60 s (with `requireTailscale`, only while Tailscale is running).
 - **fail2ban:** a Keepwatch server bans an address after very few failed SSH logins (by default for a
-  week). So the app checks **locally** first that a key exists and that the server is in
-  `known_hosts` (also as `[host]:port`, `HostName` or `HostKeyAlias` from your ssh config), and it
-  **never retries by itself** after "Permission denied", an unknown or a changed host key. Instead it
-  shows one sentence about what to do, "Try Again" and "Open Terminal".
+  week). sshd also logs "Connection closed by authenticating user ... [preauth]" when a BatchMode client
+  simply has no usable key, and the aggressive sshd jail counts that too. So:
+  - The app checks **locally**, without contacting the server, that a usable key exists (a key in the
+    agent, or a key file without passphrase - a passphrase-protected key that is not in the agent is
+    reported as "Your SSH key isn't available to the app. Run `ssh-add --apple-use-keychain ~/.ssh/<key>`
+    (or add it to your agent) and retry.") and that the server is in `known_hosts` (also as
+    `[host]:port`, `HostName` or `HostKeyAlias` from your ssh config).
+  - Only clearly recognized network errors before authentication ("Connection refused", "Could not
+    resolve hostname", timeouts, ...) are retried automatically. **Any other failure** - "Permission
+    denied", "Too many authentication failures", "no such identity", passphrase or agent errors, a changed
+    or unknown host key, any unexplained exit 255 before the forward came up, and a login that hangs for
+    60 s (e.g. an agent waiting for approval) - stops automatic connecting **for good**: the block is
+    stored in UserDefaults (`tunnelAuthBlock`) and survives sleep, relaunch, crash restarts and login.
+    Only "Try Again" (one attempt per click, ignored while an attempt is running, because killing ssh
+    mid-login would itself be logged) or a configuration change lifts it; a successful login clears it.
+    So without user action the app produces at most one failed authentication, ever.
+  - The state screen says what to do, with "Try Again" and "Open Terminal".
 - **Quit:** SIGTERM to ssh, wait briefly. After a crash ssh would stay orphaned (parent launchd): the
   next launch kills such processes (`pgrep -f Tag=keepwatch-desktop-tunnel`, PPID 1).
 - Links inside a UI that point at `http://localhost:<remote port>` or `http(s)://<host>:<remote port>`

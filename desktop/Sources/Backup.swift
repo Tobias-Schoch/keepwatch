@@ -276,8 +276,10 @@ final class Backup {
         env["KW_SSH_USER"] = cfg.user
         env["KW_SSH_PORT"] = String(cfg.sshPort)
         env["KW_BACKUP_KEYCHAIN"] = Self.keychainEntry
+        // KW_HOST goes in bare (also for IPv6, the script adds brackets itself); our own
+        // source URL needs them: sftp:user@[2001:db8::1]:/path.
         if Self.sourceOverride == nil, let repo = cfg.backupRepo, repo != AppConfig.defaultBackupRepo {
-            env["KW_BACKUP_SOURCE"] = "sftp:\(cfg.target):\(repo)"
+            env["KW_BACKUP_SOURCE"] = "sftp:\(cfg.sftpTarget):\(repo)"
         }
         env["LC_ALL"] = "en_US.UTF-8"
         var args = [script, folderURL.path]

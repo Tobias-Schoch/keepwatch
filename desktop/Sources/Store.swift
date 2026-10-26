@@ -194,9 +194,10 @@ final class Store {
         switch Tunnel.shared.problem {
         case .noConfig: "No configuration."
         case .noKey: "No SSH key on this Mac."
+        case .keyUnavailable: "Your SSH key isn't available to the app."
         case .unknownHost: "The server is not in known_hosts."
         case .hostKeyChanged: "The server presents a different host key."
-        case .denied: "The server rejects the SSH key."
+        case .denied: "The SSH login failed."
         case .portsBusy: "The local tunnel ports are busy."
         case .sshMissing: "/usr/bin/ssh is missing."
         case .unreachable, nil: "The SSH tunnel is down."
@@ -214,8 +215,12 @@ final class Store {
             return "Run \"\(ssh)\" once in Terminal and confirm the server's fingerprint, then \"Try again\"."
         case .hostKeyChanged:
             return "That can be a freshly installed server - or an attack. Check in Terminal first and remove the old line from ~/.ssh/known_hosts, then \"Try again\"."
+        case .keyUnavailable(let name):
+            return "Run ssh-add --apple-use-keychain ~/.ssh/\(name ?? "<key>") (or add it to your agent) and retry. "
+                + "The app does not try again by itself: a login that cannot use the key counts as a failed login for fail2ban on the server."
         case .denied:
-            return "Check \"\(ssh)\" in Terminal. Do not keep trying: after a few rejected logins fail2ban on the server bans this Mac (by default for a week)."
+            return "Check \"\(ssh)\" in Terminal, then \"Try again\". The app does not try again by itself: "
+                + "a single failed login can get this Mac banned by fail2ban on the server (by default for a week)."
         case .portsBusy:
             let first = Ports.remote.map { Ports.local($0, offset: 0) }.map(String.init).joined(separator: ", ")
             return "\(first) and the fallback ports are busy. Stop the other tunnel (lsof -iTCP -sTCP:LISTEN), then \"Try again\"."
@@ -283,6 +288,7 @@ final class Store {
     /// The configuration file changed (Settings, "Reload Configuration", or it appeared).
     func configChanged() {
         Tunnel.shared.stop()
+        Tunnel.shared.clearAuthBlock()
         Ports.offset = 0
         health = []
         failures = 0

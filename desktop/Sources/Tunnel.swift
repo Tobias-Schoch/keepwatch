@@ -10,10 +10,16 @@ import Observation
 //
 // and loads the pages from http://localhost:<local port>.
 //
-// fail2ban: Keepwatch bans an address after very few failed SSH logins (by default for a week).
-// So the app checks locally first whether a key and the server's host key (known_hosts) are
-// there, and NEVER retries on its own after the server rejected the login - only network
-// errors (before authentication) are retried.
+// fail2ban: Keepwatch bans an address after very few failed SSH logins (by default for a week) -
+// and sshd also logs "Connection closed by authenticating user ... [preauth]" when a BatchMode
+// client simply has no usable key, which the aggressive sshd jail counts as well. So:
+//  - the app checks locally first that a usable key (agent, or a key file without passphrase)
+//    and the server's host key (known_hosts) are there - without contacting the server;
+//  - after ANY failure that is not clearly a network error before authentication, it never
+//    connects again by itself: not on the next check, not after sleep, not after a restart of
+//    the app (the block is stored in UserDefaults). Only "Try Again" or a configuration change
+//    lifts it, and each of those starts exactly one attempt.
+// So without user action there is at most one failed authentication, ever.
 
 /// Local tunnel ports. Local port = 10000 + remote port (remote ports above 54635: remote - 10000).
 /// If one of them is busy (another service, a second copy of the app), all move by 100, then 200 ...
@@ -54,6 +60,9 @@ final class Tunnel {
         case noConfig
         case sshMissing
         case noKey
+        /// A key exists but ssh cannot use it non-interactively (passphrase, agent refused).
+        /// Associated value: the key file name, if known.
+        case keyUnavailable(String?)
         case unknownHost
         case hostKeyChanged
         case denied
@@ -76,8 +85,40 @@ final class Tunnel {
     @ObservationIgnored private var retryTask: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var lastRestart: Date?
+    @ObservationIgnored private var timedOut = false
 
     private enum Intent { case run, restart, stop }
+
+    // MARK: Authentication block (persists across launches)
+
+    private static let blockKey = "tunnelAuthBlock"
+
+    /// The failure that stopped automatic connecting, or nil.
+    static var authBlock: Problem? {
+        get {
+            guard let v = UserDefaults.standard.string(forKey: blockKey) else { return nil }
+            switch v {
+            case "denied": return .denied
+            case "hostKeyChanged": return .hostKeyChanged
+            case "unknownHost": return .unknownHost
+            default: return v.hasPrefix("key:") ? .keyUnavailable(v.count > 4 ? String(v.dropFirst(4)) : nil) : .denied
+            }
+        }
+        set {
+            let v: String? = switch newValue {
+            case nil: nil
+            case .denied: "denied"
+            case .hostKeyChanged: "hostKeyChanged"
+            case .unknownHost: "unknownHost"
+            case .keyUnavailable(let k): "key:\(k ?? "")"
+            default: "denied"
+            }
+            UserDefaults.standard.set(v, forKey: blockKey)
+        }
+    }
+
+    /// Lift the block: the user changed the configuration (other host, user or port).
+    func clearAuthBlock() { Self.authBlock = nil }
 
     var isUp: Bool { state == .up }
     var problem: Problem? { if case .failed(let p) = state { p } else { nil } }
@@ -106,11 +147,15 @@ final class Tunnel {
         return state
     }
 
-    /// "Try again" button.
+    /// "Try again" button: the only way out of an authentication block, and exactly one attempt.
+    /// While an attempt is running it does nothing - killing ssh in the middle of the login
+    /// would itself be logged as an aborted authentication.
     func retry() {
+        guard state != .connecting else { return }
         attempts = 0
         nextAttempt = nil
         retryTask?.cancel()
+        Self.authBlock = nil
         if process?.isRunning == true { restart() } else { state = .off; start() }
     }
 
@@ -161,6 +206,12 @@ final class Tunnel {
 
     private func start() {
         retryTask?.cancel()
+        // After an authentication failure: never by itself (also after a relaunch or wake).
+        if let blocked = Self.authBlock {
+            process = nil
+            state = .failed(blocked)
+            return
+        }
         generation += 1
         let gen = generation
         state = .connecting
@@ -173,7 +224,11 @@ final class Tunnel {
         guard FileManager.default.isExecutableFile(atPath: Self.ssh) else { return fail(.sshMissing, gen) }
         // 1. Check up front what would otherwise count as a failed login for fail2ban.
         let ssh = await Self.sshConfig()
-        if !(await Self.hasKey(ssh)) { return fail(.noKey, gen) }
+        switch await Self.keyCheck(ssh) {
+        case .ok: break
+        case .none: return fail(.noKey, gen)
+        case .locked(let name): return fail(.keyUnavailable(name), gen)
+        }
         if !(await Self.knowsHost(ssh)) { return fail(.unknownHost, gen) }
         // 2. Clean up tunnels of a crashed app (their parent is launchd then).
         await Self.killOrphans()
@@ -191,6 +246,8 @@ final class Tunnel {
                     "-o", "ServerAliveInterval=15",
                     "-o", "ServerAliveCountMax=3",
                     "-o", "BatchMode=yes",
+                    "-o", "PreferredAuthentications=publickey",
+                    "-o", "IdentitiesOnly=no",
                     "-o", "ConnectTimeout=15",
                     "-o", "StrictHostKeyChecking=yes",
                     "-o", "ControlMaster=no",
@@ -229,20 +286,23 @@ final class Tunnel {
         process = p
 
         // 4. Ready as soon as ssh listens locally (it only does after a successful login).
+        //    ConnectTimeout covers TCP and the banner; a login that hangs longer than this is
+        //    usually an agent waiting for approval. Killing it is logged as an aborted login,
+        //    so it counts as an authentication failure (no automatic retry).
         let port = Ports.local(Ports.dashboard)
-        let deadline = Date().addingTimeInterval(25)
+        let deadline = Date().addingTimeInterval(60)
         while Date() < deadline, p.isRunning, gen == generation {
             if await Task.detached(operation: { Self.canConnect(port) }).value {
                 state = .up
                 attempts = 0
                 nextAttempt = nil
+                Self.authBlock = nil
                 return
             }
             try? await Task.sleep(for: .milliseconds(200))
         }
         if p.isRunning && gen == generation && state == .connecting {
-            // Stuck while connecting: abort, counts as a network error.
-            stderrTail += "\nTimed out while opening the tunnel"
+            timedOut = true
             p.terminate()
         }
     }
@@ -263,7 +323,12 @@ final class Tunnel {
             break
         }
         let err = stderrTail
-        let problem = Self.classify(err, code: code)
+        var problem: Problem = timedOut ? .keyUnavailable(nil) : Self.classify(err, code: code)
+        timedOut = false
+        // It was up, so the login had worked: a drop without an explicit auth error is the network.
+        if wasUp, !Self.isAuthError(err), !problem.retriesAutomatically, problem != .portsBusy {
+            problem = .unreachable(Self.lastLine(err, code))
+        }
         if wasUp, problem.retriesAutomatically {
             // It was up and dropped (sleep, network change): reconnect right away.
             state = .connecting
@@ -280,6 +345,8 @@ final class Tunnel {
             start()
             return
         }
+        // Anything the server may have logged as a failed or aborted login: stop for good.
+        if !problem.retriesAutomatically && problem != .portsBusy { Self.authBlock = problem }
         fail(problem, generation)
     }
 
@@ -301,19 +368,53 @@ final class Tunnel {
 
     // MARK: Classify errors
 
+    nonisolated static let authPatterns = [
+        "permission denied", "too many authentication failures", "no more authentication methods",
+        "authentication failed", "no such identity", "enter passphrase", "incorrect passphrase",
+        "agent refused", "agent admitted failure", "sign_and_send_pubkey", "communication with agent failed",
+        "could not open a connection to your authentication agent",
+    ]
+    nonisolated static let keyPatterns = [
+        "no such identity", "enter passphrase", "incorrect passphrase", "agent refused", "agent admitted failure",
+        "sign_and_send_pubkey", "communication with agent failed", "could not open a connection to your authentication agent",
+    ]
+    /// Errors that happen before authentication (or after the tunnel was up) - safe to retry.
+    nonisolated static let networkPatterns = [
+        "could not resolve hostname", "nodename nor servname", "name or service not known",
+        "temporary failure in name resolution", "connection refused", "connection timed out",
+        "operation timed out", "network is unreachable", "no route to host", "host is down",
+        "kex_exchange_identification", "connection reset", "closed by remote host", "broken pipe",
+        "server not responding", "software caused connection abort", "can't assign requested address",
+    ]
+
+    nonisolated static func isAuthError(_ err: String) -> Bool {
+        let e = err.lowercased()
+        return authPatterns.contains { e.contains($0) }
+    }
+
+    nonisolated static func lastLine(_ err: String, _ code: Int32) -> String {
+        let line = err.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            .last(where: { !$0.isEmpty && !$0.hasPrefix("Warning:") }) ?? "ssh exited (code \(code))"
+        return String(line.prefix(160))
+    }
+
+    /// Conservative: only a clearly recognized network error before authentication is retried.
+    /// Everything else - explicit auth errors and any unexplained exit 255 - counts as a failed
+    /// login and needs the user.
     nonisolated static func classify(_ err: String, code: Int32) -> Problem {
         let e = err.lowercased()
         if e.contains("remote host identification has changed") || e.contains("host key for") && e.contains("has changed") {
             return .hostKeyChanged
         }
         if e.contains("host key verification failed") || e.contains("no ") && e.contains("host key is known") { return .unknownHost }
-        if e.contains("permission denied") || e.contains("too many authentication failures") { return .denied }
+        if isAuthError(err) {
+            return keyPatterns.contains { e.contains($0) } ? .keyUnavailable(nil) : .denied
+        }
         if e.contains("address already in use") || e.contains("cannot listen to port") || e.contains("could not request local forwarding") {
             return .portsBusy
         }
-        let line = err.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-            .last(where: { !$0.isEmpty && !$0.hasPrefix("Warning:") }) ?? "ssh exited (code \(code))"
-        return .unreachable(String(line.prefix(160)))
+        if networkPatterns.contains(where: { e.contains($0) }) { return .unreachable(lastLine(err, code)) }
+        return .denied
     }
 
     // MARK: Local pre-checks (without asking the server)
@@ -356,12 +457,22 @@ final class Tunnel {
         return SSHConfig(identityFiles: ids, knownHosts: known, identityAgent: agent, hostKeyNames: Array(Set(names)))
     }
 
-    /// A private key in ~/.ssh or one in the ssh-agent (keychain).
-    nonisolated static func hasKey(_ c: SSHConfig) async -> Bool {
-        if c.identityFiles.contains(where: { FileManager.default.isReadableFile(atPath: $0) }) { return true }
+    enum KeyCheck { case ok, none, locked(String) }
+
+    /// Is there a key ssh can use without asking? The agent (incl. keys added with
+    /// `ssh-add --apple-use-keychain`), or a key file without passphrase. A key file with a passphrase
+    /// that is not in the agent would make BatchMode ssh give up mid-login - which sshd logs and
+    /// fail2ban counts - so that is caught here, without contacting the server.
+    nonisolated static func keyCheck(_ c: SSHConfig) async -> KeyCheck {
         // A custom agent via IdentityAgent (e.g. 1Password) cannot be checked here.
-        if let a = c.identityAgent, a != "none", a != "SSH_AUTH_SOCK" { return true }
-        return await Shell.run("/usr/bin/ssh-add", ["-l"], timeout: 5).code == 0
+        if let a = c.identityAgent, a != "none", a != "SSH_AUTH_SOCK" { return .ok }
+        if c.identityAgent != "none", await Shell.run("/usr/bin/ssh-add", ["-l"], timeout: 5).code == 0 { return .ok }
+        let files = c.identityFiles.filter { FileManager.default.isReadableFile(atPath: $0) }
+        guard let first = files.first else { return .none }
+        for f in files {
+            if await Shell.run("/usr/bin/ssh-keygen", ["-y", "-P", "", "-f", f], timeout: 5).code == 0 { return .ok }
+        }
+        return .locked((first as NSString).lastPathComponent)
     }
 
     nonisolated static func knowsHost(_ c: SSHConfig) async -> Bool {

@@ -74,7 +74,7 @@ struct SettingsView: View {
 
     private func save() {
         var c = Config.current ?? AppConfig(host: "")
-        c.host = host.trimmingCharacters(in: .whitespaces)
+        c.host = AppConfig.normalizeHost(host)
         c.user = user.trimmingCharacters(in: .whitespaces)
         guard let p = Int(port.trimmingCharacters(in: .whitespaces)) else { error = "The SSH port must be a number."; return }
         c.sshPort = p

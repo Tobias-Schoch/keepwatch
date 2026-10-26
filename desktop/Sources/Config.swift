@@ -5,7 +5,7 @@ import Foundation
 // host, user and SSH port. Nothing about the server is compiled into the app.
 //
 //   {
-//     "host": "203.0.113.10",            // IP or DNS name (with Tailscale: the MagicDNS name)
+//     "host": "203.0.113.10",            // IP, DNS name or IPv6 address ("2001:db8::1" or "[2001:db8::1]")
 //     "user": "root",
 //     "sshPort": 22,
 //     "requireTailscale": true,          // false: plain SSH, no Tailscale checks at all
@@ -51,7 +51,7 @@ struct AppConfig: Codable, Equatable {
     /// Tolerant: every field except `host` is optional.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        host = try c.decode(String.self, forKey: .host).trimmingCharacters(in: .whitespaces)
+        host = Self.normalizeHost(try c.decode(String.self, forKey: .host))
         user = (try? c.decodeIfPresent(String.self, forKey: .user)).flatMap { $0 } ?? "root"
         sshPort = (try? c.decodeIfPresent(Int.self, forKey: .sshPort)).flatMap { $0 } ?? 22
         requireTailscale = (try? c.decodeIfPresent(Bool.self, forKey: .requireTailscale)).flatMap { $0 } ?? true
@@ -61,7 +61,18 @@ struct AppConfig: Codable, Equatable {
         if uis.isEmpty { uis = Self.defaultUIs }
     }
 
+    /// IPv6 literals are stored without brackets; brackets only where a URL-like syntax needs them.
+    static func normalizeHost(_ raw: String) -> String {
+        var h = raw.trimmingCharacters(in: .whitespaces)
+        if h.hasPrefix("[") && h.hasSuffix("]") { h = String(h.dropFirst().dropLast()) }
+        return h
+    }
+
+    var isIPv6: Bool { host.contains(":") }
+    /// For ssh: `user@host`, IPv6 without brackets (ssh does not strip them).
     var target: String { "\(user)@\(host)" }
+    /// For restic's sftp backend: `user@[2001:db8::1]` - the brackets separate the address from `:/path`.
+    var sftpTarget: String { isIPv6 ? "\(user)@[\(host)]" : target }
 
     /// Host and user end up in ssh arguments and in a Terminal command: allow only plain names.
     var problem: String? {
