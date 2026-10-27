@@ -206,12 +206,14 @@ def ports() -> dict[str, int]:
 
 
 def extra_uis() -> list[dict]:
-    """KW_EXTRA_UIS="Name=port Other_name=port" (underscores become spaces, as in lib/kwconf.py)."""
+    """KW_EXTRA_UIS="Name=port Other_name=port/some/path/" (underscores become spaces, as in lib/kwconf.py):
+    [{name, port, path}], path "/" unless given (for a UI whose "/" redirects somewhere unreachable)."""
     out = []
     for item in get_list("KW_EXTRA_UIS"):
-        name, _, port = item.rpartition("=")
+        name, _, rest = item.rpartition("=")
+        port, slash, path = rest.partition("/")
         if name and port.isdigit():
-            out.append({"name": name.replace("_", " "), "port": int(port)})
+            out.append({"name": name.replace("_", " "), "port": int(port), "path": "/" + path if slash else "/"})
     return out
 
 
@@ -224,6 +226,20 @@ def admin_uis() -> list[dict]:
     if enabled("proxy"):
         uis.append({"name": "Proxy Manager", "port": p["proxyAdmin"]})
     return uis + extra_uis()
+
+
+def tools() -> list[dict]:
+    """Admin UIs the dashboard links to (Overview "Tools", quick search): Portainer and the Proxy Manager
+    while their module is on, then KW_EXTRA_UIS. [{id, name, port, path}], port on the server (127.0.0.1)."""
+    p = ports()
+    out = []
+    if enabled("portainer"):
+        out.append({"id": "portainer", "name": "Portainer", "port": p["portainer"], "path": "/"})
+    if enabled("proxy"):
+        out.append({"id": "proxy", "name": "Proxy Manager", "port": p["proxyAdmin"], "path": "/"})
+    for i, ui in enumerate(extra_uis(), 1):
+        out.append({"id": f"extra-{i}", **ui})
+    return out
 
 
 def portainer_url() -> str:
@@ -246,5 +262,5 @@ def self_update_repo() -> str:
 def public() -> dict:
     """GET /api/config."""
     return {"hostname": hostname(), "modules": {m: enabled(m) for m in MODULES}, "localTz": local_tz_name(),
-            "ports": ports(), "extraUis": extra_uis(), "passkey": passkey(), "version": version(),
+            "ports": ports(), "extraUis": extra_uis(), "tools": tools(), "passkey": passkey(), "version": version(),
             "selfUpdate": bool(self_update_repo())}

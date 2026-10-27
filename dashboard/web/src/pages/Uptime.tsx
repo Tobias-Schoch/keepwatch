@@ -4,7 +4,7 @@ import { api } from "../api";
 import { AreaChart } from "../charts";
 import { Callout, cx, Pill, Segmented } from "../design/ui";
 import { clock, dateTime, duration, fmtDate, LOCALE, num } from "../format";
-import { dayTone, useUptime, type UptimeDay, type UptimeDetail, type UptimeSite } from "../uptime";
+import { dayTone, fmtUptime, useUptime, type UptimeDay, type UptimeDetail, type UptimeSite } from "../uptime";
 import "./uptime.css";
 
 /**
@@ -13,7 +13,7 @@ import "./uptime.css";
  * outages. Data: /api/uptime (one request for all rows).
  */
 
-const pct = (v: number) => `${num(v, v >= 99.995 ? 0 : v >= 99 ? 2 : 1)}%`;
+const pct = (v: number) => `${fmtUptime(v)}%`;
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(LOCALE, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
 
 function dayText(d: UptimeDay): string {

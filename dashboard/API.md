@@ -56,7 +56,15 @@ Configuration: `/etc/keepwatch/keepwatch.conf` (env `KW_CONF` overrides), defaul
                                        // log-archive backup image-scan lynis proxy portainer dashboard
   localTz: string;                     // KW_LOCAL_TZ ("Etc/UTC"): schedules and day boundaries
   ports: { dashboard: number; proxyAdmin: number; portainer: number };   // all on 127.0.0.1
-  extraUis: { name: string; port: number }[];   // KW_EXTRA_UIS="Name=port Other_name=port" (_ → space)
+  extraUis: { name: string; port: number; path: string }[];
+                                       // KW_EXTRA_UIS="Name=port Other_name=port/some/path/" (_ → space):
+                                       // name = before the last "=", port = the digits up to the first "/",
+                                       // path = the rest ("/" if none), for a UI whose "/" redirects elsewhere
+  tools: { id: string; name: string; port: number; path: string }[];
+                                       // admin UIs the dashboard links to: "portainer" (module portainer),
+                                       // "proxy" = "Proxy Manager" (module proxy), then "extra-1", "extra-2", …
+                                       // from KW_EXTRA_UIS; port on the server, path to open ("/", or the
+                                       // path from KW_EXTRA_UIS, e.g. License_admin=9003/admin/)
   passkey: boolean;                    // KW_DASHBOARD_PASSKEY
   version: string;                     // VERSION file in the repository root, else the deployed commit from
                                        // VERSION.json ("abc1234", "+dirty" for uncommitted changes), else "dev"
@@ -65,6 +73,17 @@ Configuration: `/etc/keepwatch/keepwatch.conf` (env `KW_CONF` overrides), defaul
 ```
 
 `base` and `dashboard` are always `true`.
+
+**Links to the tools** (Overview "Tools", Services, quick search): every UI is on `127.0.0.1` on the
+server and reaches your computer through the SSH tunnel at `http://localhost:<local port>`: server port
++ 10000 for `./keepwatch tunnel` and the macOS app (the app shifts all ports by 100–900 when they are taken),
+the same port for a hand-made `-L 9004:127.0.0.1:9004`. The UI reads the shift from where it is served itself
+(`location.port` against `ports.dashboard`), so `http://localhost:19104` links Portainer to
+`http://localhost:19102`; without a port or with a shift that is not a multiple of 100 it assumes + 10000
+(`web/src/tools.ts`). Plain links (`target="_blank"`): a browser opens a new tab, the macOS app opens the address in its own window
+for that UI. Deep links: a Portainer stack is
+`/#!/<endpointId>/docker/stacks/<name>?id=<id>&type=2&regular=true&orphaned=false&orphanedRunning=false`
+(`GET /api/stacks`), the Proxy Manager has no stable address per host, so sites link to `/nginx/proxy`.
 
 ## GET /api/overview  (poll every 5 s)
 
@@ -347,6 +366,8 @@ Without the log-archive module every endpoint answers 404 and no problems are ra
   portainer: { connected: boolean; reason: string | null };  // without a token: false + reason
   stacks: {
     id: number | null; name: string; source: "git" | "file" | "compose";
+    endpointId: number | null;               // Portainer environment (for links into Portainer); for a compose
+                                             // project Portainer deployed but did not list: the most common one
     git: { url: string; ref: string } | null;
     autoUpdate: string | null;              // e.g. "5m"
     containers: string[];

@@ -12,6 +12,7 @@ import type { Area, Overview as O, Problem } from "../types";
 import { useUpdates } from "../updates";
 import { SelfUpdateBanner } from "./SelfUpdate";
 import { TimelineRecentSection } from "./Timeline";
+import { ToolsSection } from "./Tools";
 import { UpdatesChip } from "./Updates";
 
 const AREA_ICON: Record<Area, LucideIcon> = {
@@ -256,6 +257,7 @@ export function OverviewPage() {
               )}
               <SelfUpdateBanner />
               <Kpis o={o} onMachine={showMachine} />
+              <ToolsSection />
               <TimelineRecentSection />
               <Charts o={o} />
               <div ref={machineRef}>

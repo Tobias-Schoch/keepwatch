@@ -450,12 +450,12 @@ function stacks(): Stacks {
   return {
     portainer: { connected: settings.portainer.connected, reason: settings.portainer.reason },
     stacks: [
-      { id: 13, name: "shop", source: "git", git: repo("shop"), autoUpdate: null, containers: ["shop-frontend", "shop-api", "shop-db"], envCount: ENV[13].length, updatedAt: now() - 2 * 86400, updatedBy: "admin", managed: true },
-      { id: 29, name: "web", source: "git", git: repo("web"), autoUpdate: null, containers: ["web"], envCount: ENV[29].length, updatedAt: now() - 7 * 86400, updatedBy: "admin", managed: true },
-      { id: 28, name: "blog", source: "git", git: repo("blog"), autoUpdate: null, containers: ["blog-web", "blog-app-1"], envCount: ENV[28].length, updatedAt: now() - 12 * 86400, updatedBy: "admin", managed: true },
-      { id: 33, name: "wiki", source: "git", git: repo("wiki"), autoUpdate: "5m", containers: ["wiki"], envCount: 0, updatedAt: now() - 57 * 86400, updatedBy: "admin", managed: true },
-      { id: 34, name: "photos", source: "git", git: repo("photos"), autoUpdate: null, containers: ["photos"], envCount: 0, updatedAt: now() - 20 * 86400, updatedBy: "admin", managed: true },
-      { id: null, name: "keepwatch", source: "compose", git: null, autoUpdate: null, containers: infra, envCount: null, updatedAt: null, updatedBy: null, managed: false },
+      { id: 13, endpointId: 3, name: "shop", source: "git", git: repo("shop"), autoUpdate: null, containers: ["shop-frontend", "shop-api", "shop-db"], envCount: ENV[13].length, updatedAt: now() - 2 * 86400, updatedBy: "admin", managed: true },
+      { id: 29, endpointId: 3, name: "web", source: "git", git: repo("web"), autoUpdate: null, containers: ["web"], envCount: ENV[29].length, updatedAt: now() - 7 * 86400, updatedBy: "admin", managed: true },
+      { id: 28, endpointId: 3, name: "blog", source: "git", git: repo("blog"), autoUpdate: null, containers: ["blog-web", "blog-app-1"], envCount: ENV[28].length, updatedAt: now() - 12 * 86400, updatedBy: "admin", managed: true },
+      { id: 33, endpointId: 3, name: "wiki", source: "git", git: repo("wiki"), autoUpdate: "5m", containers: ["wiki"], envCount: 0, updatedAt: now() - 57 * 86400, updatedBy: "admin", managed: true },
+      { id: 34, endpointId: 3, name: "photos", source: "git", git: repo("photos"), autoUpdate: null, containers: ["photos"], envCount: 0, updatedAt: now() - 20 * 86400, updatedBy: "admin", managed: true },
+      { id: null, endpointId: null, name: "keepwatch", source: "compose", git: null, autoUpdate: null, containers: infra, envCount: null, updatedAt: null, updatedBy: null, managed: false },
     ],
   };
 }

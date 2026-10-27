@@ -35,13 +35,33 @@ export const MODULES = [
 
 export type ModuleId = (typeof MODULES)[number]["id"];
 
+/** An admin UI on the server (127.0.0.1:port), reached through the tunnel. id: "portainer" | "proxy" | "extra-<n>". */
+export interface Tool {
+  id: string;
+  name: string;
+  port: number;
+  path: string;
+}
+
+/** Tools from modules, ports and extraUis – for a backend without `tools` (and the fallback config). */
+export function deriveTools(c: Pick<Config, "modules" | "ports" | "extraUis">): Tool[] {
+  const out: Tool[] = [];
+  if (c.modules.portainer !== false && c.ports.portainer) out.push({ id: "portainer", name: "Portainer", port: c.ports.portainer, path: "/" });
+  if (c.modules.proxy !== false && c.ports.proxyAdmin) out.push({ id: "proxy", name: "Proxy Manager", port: c.ports.proxyAdmin, path: "/" });
+  c.extraUis.forEach((u, i) => out.push({ id: `extra-${i + 1}`, name: u.name, port: u.port, path: u.path || "/" }));
+  return out;
+}
+
 export interface Config {
   hostname: string;
   modules: Partial<Record<ModuleId, boolean>>;
   /** The user's timezone (KW_LOCAL_TZ): schedules and day boundaries. */
   localTz: string;
   ports: { dashboard: number; proxyAdmin: number | null; portainer: number | null };
-  extraUis: { name: string; port: number }[];
+  /** KW_EXTRA_UIS="Name=port Other_name=port/some/path/" – path "/" unless given (older backends: missing). */
+  extraUis: { name: string; port: number; path?: string }[];
+  /** Admin UIs to link to (Portainer, Proxy Manager, KW_EXTRA_UIS) – only for enabled modules. See tools.ts. */
+  tools: Tool[];
   /** Dangerous actions need a passkey (Touch ID, Windows Hello, security key). */
   passkey: boolean;
   version: string;
@@ -59,6 +79,7 @@ const FALLBACK: Config = {
   localTz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   ports: { dashboard: 9004, proxyAdmin: 9001, portainer: 9002 },
   extraUis: [],
+  tools: deriveTools({ modules: ALL_ON, ports: { dashboard: 9004, proxyAdmin: 9001, portainer: 9002 }, extraUis: [] }),
   passkey: true,
   version: "",
   selfUpdate: false,
@@ -88,7 +109,8 @@ export async function loadConfig(timeoutMs = 3000): Promise<Config> {
     clearTimeout(t);
     if (!res.ok) throw new Error(String(res.status));
     const c = (await res.json()) as Partial<Config>;
-    set({ ...FALLBACK, ...c, modules: { ...ALL_ON, ...(c.modules ?? {}) }, ports: { ...FALLBACK.ports, ...(c.ports ?? {}) }, fallback: false });
+    const next: Config = { ...FALLBACK, ...c, modules: { ...ALL_ON, ...(c.modules ?? {}) }, ports: { ...FALLBACK.ports, ...(c.ports ?? {}) }, fallback: false };
+    set({ ...next, tools: Array.isArray(c.tools) ? c.tools : deriveTools(next) });
   } catch {
     set(FALLBACK);
   }

@@ -44,6 +44,8 @@ html[data-design^="obsidian"] .svc-access { display: inline-flex; align-items: c
 html[data-design^="obsidian"] .svc-access[data-on] { color: rgb(var(--o-acc)); }
 html[data-design^="obsidian"] .svc-access:hover { color: var(--o-text); }
 html[data-design^="obsidian"] .svc-access:focus-visible { outline: 2px solid rgb(var(--o-acc) / 0.5); outline-offset: 2px; }
+html[data-design^="obsidian"] .svc-npm { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--o-faint); transition: color 0.2s, background 0.2s; }
+html[data-design^="obsidian"] .svc-npm:hover { color: var(--o-text); background: rgba(255, 255, 255, 0.05); }
 
 /* Images: version, update, vulnerabilities */
 html[data-design^="obsidian"] .svc-ver { font-size: 13.5px; font-weight: 600; color: var(--o-sand); font-variant-numeric: tabular-nums; }

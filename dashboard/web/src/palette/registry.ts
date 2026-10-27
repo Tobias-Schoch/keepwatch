@@ -14,10 +14,11 @@ import type { Backups, Container, Docker, Security, Site, Sites, Stack, Stacks }
  * Gate entries of optional modules with `has("<module>")` from config.tsx.
  */
 
-export type GroupId = "actions" | "services" | "sites" | "containers" | "backups" | "settings" | "pages";
+export type GroupId = "actions" | "tools" | "services" | "sites" | "containers" | "backups" | "settings" | "pages";
 
 export const GROUPS: { id: GroupId; label: string }[] = [
   { id: "actions", label: "Actions" },
+  { id: "tools", label: "Tools" },
   { id: "services", label: "Services" },
   { id: "sites", label: "Sites" },
   { id: "containers", label: "Containers" },
@@ -69,6 +70,11 @@ export interface PaletteItem {
   mono?: boolean;
   /** Weight for equally good matches (higher = further up). */
   rank?: number;
+  /** Only shown once something is typed (many similar entries, e.g. one per stack). */
+  searchOnly?: boolean;
+  /** A link (admin UIs, tools.ts): opened right in the keypress/click, before the palette closes – a
+   *  window.open after the close animation could count as a popup. `run` is not called then. */
+  href?: string;
   run: (ctx: PaletteCtx) => void;
 }
 

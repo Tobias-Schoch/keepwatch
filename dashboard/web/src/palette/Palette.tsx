@@ -9,6 +9,7 @@ import { dateTime, dayDate, num, plural } from "../format";
 import { openLogs } from "../logs/open";
 import { useNav, type View } from "../nav";
 import { Detail } from "../pages/Containers";
+import { openTool } from "../tools";
 import { useSiteActions } from "../pages/Sites";
 import type { Container, Country as CountryT, Sites } from "../types";
 import { UnbanConfirm } from "./dialogs";
@@ -161,7 +162,7 @@ function Palette({ data, ctx }: { data: PaletteData; ctx: PaletteCtx }) {
   );
 }
 
-const LIMIT_EMPTY: Partial<Record<GroupId, number>> = { actions: 4, services: 8, pages: 5, sites: 0, containers: 0, backups: 0, settings: 0 };
+const LIMIT_EMPTY: Partial<Record<GroupId, number>> = { actions: 4, tools: 4, services: 8, pages: 5, sites: 0, containers: 0, backups: 0, settings: 0 };
 
 interface IpInfo {
   ip: string;
@@ -231,6 +232,7 @@ function PaletteBody({ data, ctx }: { data: PaletteData; ctx: PaletteCtx }) {
     if (ip) return out;
     const scored = new Map<GroupId, { item: PaletteItem; score: number; hl: number[] }[]>();
     for (const it of items) {
+      if (!needle && it.searchOnly) continue;
       const m = fuzzy(needle, it.title, `${it.keywords ?? ""} ${it.hint ?? ""}`);
       if (!m) continue;
       const arr = scored.get(it.group) ?? [];
@@ -274,6 +276,11 @@ function PaletteBody({ data, ctx }: { data: PaletteData; ctx: PaletteCtx }) {
 
   const runItem = useCallback(
     (it: PaletteItem) => {
+      if (it.href) {
+        openTool(it.href);
+        close();
+        return;
+      }
       close(() => it.run(ctx));
     },
     [close, ctx],

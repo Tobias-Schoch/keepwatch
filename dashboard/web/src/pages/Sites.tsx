@@ -1,4 +1,4 @@
-import { ArrowUpRight, LockKeyhole, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, LockKeyhole, RefreshCw, ShieldCheck, Waypoints } from "lucide-react";
 import { useState } from "react";
 import { api, type Poll } from "../api";
 import { Button, Confirm, cx, type Tone } from "../design/ui";
@@ -8,7 +8,8 @@ import type { RenewResult, Site, Sites } from "../types";
 import { AccessSheet } from "./Access";
 import { UptimeDetailPanel, UptimeStrip } from "./Uptime";
 import { GradeScore } from "./SiteGrade";
-import type { UptimeSite } from "../uptime";
+import { fmtUptime, type UptimeSite } from "../uptime";
+import { PROXY_HOSTS_PATH, toolHref, useTool } from "../tools";
 
 /** Above this the Proxy Manager renews on its own; below it the page offers "Renew due". */
 const DUE_DAYS = 30;
@@ -59,7 +60,7 @@ export function siteIssues(s: Site, u: UptimeSite | null | undefined): { tone: T
   const ct = certTone(s.cert?.daysLeft);
   if (ct !== "ok") out.push({ tone: ct, text: s.cert ? `Certificate: ${certText(s)}` : "no certificate", title: s.cert ? `Expires ${dateTime(s.cert.expiresAt)}` : undefined });
   if (!s.sslForced) out.push({ tone: "sand", text: "HTTPS not forced", title: "Also reachable unencrypted" });
-  if (!u?.down && u?.uptime30 != null && u.uptime30 < 99) out.push({ tone: "sand", text: `${num(u.uptime30, 1)}% uptime`, title: "Uptime over the last 30 days" });
+  if (!u?.down && u?.uptime30 != null && u.uptime30 < 99) out.push({ tone: "sand", text: `${fmtUptime(u.uptime30)}% uptime`, title: "Uptime over the last 30 days" });
   return out;
 }
 
@@ -72,6 +73,7 @@ function Row({ s, busy, onRenew, onAccess }: { s: Site; busy: string | null; onR
   const only4xx = s.allowlist === 0 && s.requests24h > 0 && s.errors4xx24h === s.requests24h;
   const [upOpen, setUpOpen] = useState(false); // uptime expanded (Uptime.tsx)
   const err5 = s.errors5xx24h;
+  const npm = useTool("proxy");
   const info = [
     `→ ${s.target}${more.length ? ` · also ${more.join(", ")}` : ""}`,
     s.cert ? `Certificate: ${certText(s)}, until ${dateTime(s.cert.expiresAt)} · ${s.cert.issuer}` : "no certificate",
@@ -117,6 +119,11 @@ function Row({ s, busy, onRenew, onAccess }: { s: Site; busy: string | null; onR
         </span>
         <span className="svc-row-side">
           {s.enabled && <UptimeStrip domain={main} open={upOpen} onToggle={() => setUpOpen((v) => !v)} />}
+          {npm && (
+            <a className="svc-npm" href={toolHref(npm, PROXY_HOSTS_PATH)} target="_blank" rel="noopener" title="Open in Proxy Manager (proxy hosts)" aria-label={`Open ${main} in Proxy Manager`}>
+              <Waypoints className="h-3.5 w-3.5" />
+            </a>
+          )}
           <button
             type="button"
             className="svc-access"

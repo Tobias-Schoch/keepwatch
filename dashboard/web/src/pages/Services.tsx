@@ -1,16 +1,17 @@
-import { ArrowUpRight, ChevronDown, KeyRound, Plus, Rocket } from "lucide-react";
+import { ArrowUpRight, ChevronDown, KeyRound, Plus, Rocket, Ship } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EVERY, usePoll } from "../api";
 import { useConfig } from "../config";
 import { Chips, Loading, PageHero, Stale, StateDot } from "../common";
 import { Button, Callout, cx, Panel, Pill, type Tone } from "../design/ui";
-import { agoShort, bytes, duration, num, pct, plural, shortDateTime, span } from "../format";
+import { agoShort, bytes, duration, pct, plural, shortDateTime, span } from "../format";
 import { LogsButton } from "../logs/LogsButton";
 import { useNav } from "../nav";
 import { openSetting } from "./settingsOpen";
 import type { Container, Docker, Site, Sites, Stack, Stacks } from "../types";
 import { useUpdates } from "../updates";
-import { useUptime, type UptimeSite, type UptimeSummary } from "../uptime";
+import { portainerStackPath, toolHref, useTool } from "../tools";
+import { fmtUptime, useUptime, type UptimeSite, type UptimeSummary } from "../uptime";
 import { Detail, HEALTH_LABEL, STATE_LABEL, stateTone } from "./Containers";
 import { NewSiteWizard } from "./NewSite";
 import { ServiceScore, SiteGradeProvider } from "./SiteGrade";
@@ -159,7 +160,7 @@ function ContainerList({ list, u, onOpen }: { list: Container[]; u: Updates | nu
 }
 
 /**
- * "Uptime 99.998843 %" in the header: the downtime of all enabled sites over the last 30 days added up, not averaged
+ * "Uptime 99.9988 %" in the header: the downtime of all enabled sites over the last 30 days added up, not averaged
  * (three sites with 8 minutes of downtime between them count 8 minutes, not 2.7). Nothing without uptime data.
  */
 function ServiceUptime({ sites, uptime }: { sites: Site[]; uptime: UptimeSummary | null }) {
@@ -174,12 +175,12 @@ function ServiceUptime({ sites, uptime }: { sites: Site[]; uptime: UptimeSummary
   const now = Date.now() / 1000;
   const title = [
     ...down.map((u) => `${u.domain}: down for ${duration(now - (u.downSince ?? now))}${u.downReason ? ` – ${u.downReason}` : ""}`),
-    ...list.map((u) => `${u.domain}: ${num(u.uptime30, 6)} %`),
+    ...list.map((u) => `${u.domain}: ${fmtUptime(u.uptime30)} %`),
     list.length > 1 ? "Last 30 days, downtime of all sites added up" : "Last 30 days",
   ].join("\n");
   return (
     <span className="svc-issue" data-tone={tone} title={title}>
-      Uptime {num(value, 6)} %
+      Uptime {fmtUptime(value)} %
     </span>
   );
 }
@@ -244,6 +245,8 @@ function Meta({ b, u, connected, onEnv, onDeploy }: { b: Block; u: Updates | nul
   if (!s?.managed) return null;
   const can = connected && s.id !== null;
   const git = gitText(u, s.name);
+  const portainer = useTool("portainer");
+  const inPortainer = portainer && portainerStackPath(s);
   return (
     <div className="svc-meta">
       <span className="svc-meta-bits">
@@ -259,6 +262,11 @@ function Meta({ b, u, connected, onEnv, onDeploy }: { b: Block; u: Updates | nul
         {s.autoUpdate && <span title="Portainer polls the repository and deploys new commits by itself">Auto-update every {s.autoUpdate}</span>}
       </span>
       <span className="svc-meta-act">
+        {portainer && inPortainer && (
+          <a className="o-btn o-btn-ghost o-btn-sm" href={toolHref(portainer, inPortainer)} target="_blank" rel="noopener" title={`Open the stack ${s.name} in Portainer`}>
+            <Ship className="h-3.5 w-3.5" /> Portainer <ArrowUpRight className="h-3 w-3 text-[var(--o-faint)]" />
+          </a>
+        )}
         <Button size="sm" variant="ghost" onClick={() => onEnv(s)} disabled={s.id === null}>
           <KeyRound className="h-3.5 w-3.5" /> Variables{s.envCount !== null ? ` · ${s.envCount}` : ""}
         </Button>

@@ -1,15 +1,16 @@
-import { Boxes, DatabaseBackup, Globe, HardDrive, LayoutGrid, RefreshCw, Rocket, ScrollText, SlidersHorizontal, TerminalSquare, Unlock } from "lucide-react";
+import { AppWindow, Boxes, DatabaseBackup, Globe, HardDrive, LayoutGrid, RefreshCw, Rocket, ScrollText, Ship, SlidersHorizontal, TerminalSquare, Unlock, Waypoints } from "lucide-react";
 import { shortDateTime } from "../format";
-import { has } from "../config";
+import { getConfig, has } from "../config";
 import { dockViews } from "../nav";
 import { HEALTH_LABEL, STATE_LABEL, stateTone } from "../pages/Containers";
 import { siteHost } from "../pages/Sites";
 import { Redeploy, repoName } from "../pages/Stacks";
 import { setServiceOpen, showSite } from "../pages/servicesStore";
 import type { Stack } from "../types";
-import { registerPalette, stackContainers, type PaletteCtx } from "./registry";
+import { registerPalette, stackContainers, type PaletteCtx, type PaletteItem } from "./registry";
 import { BackupConfirm, UnbanConfirm } from "./dialogs";
 import { openSetting, settingsIndex } from "../pages/settingsOpen";
+import { openTool, portainerStackPath, toolHref } from "../tools";
 
 /* Built-in palette sources. Template for more: registerPalette((d) => [...]). Every source checks its modules. */
 
@@ -103,6 +104,45 @@ registerPalette((d) => {
         mono: true,
         run: (ctx: PaletteCtx) => ctx.dialog((close) => <UnbanConfirm ip={b.ip} jail={b.jail} loggedIn={(d.security?.logins ?? []).some((l) => l.ip === b.ip)} onClose={close} />),
       });
+  return items;
+});
+
+/* ---------- Tools (admin UIs through the tunnel, tools.ts) ------------------------------------ */
+
+/* getConfig().tools only lists tools of enabled modules – no extra has() needed. Links open via `href`. */
+registerPalette((d) => {
+  const items: PaletteItem[] = [];
+  for (const t of getConfig().tools) {
+    const href = toolHref(t);
+    items.push({
+      id: `tool:${t.id}`,
+      group: "tools",
+      title: `Open ${t.name}`,
+      hint: href.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      keywords: t.id === "portainer" ? "portainer docker stacks admin ui" : t.id === "proxy" ? "proxy manager nginx npm hosts certificates admin ui" : "admin ui tool extra",
+      icon: t.id === "portainer" ? Ship : t.id === "proxy" ? Waypoints : AppWindow,
+      rank: 3,
+      href,
+      run: () => openTool(href),
+    });
+    if (t.id === "portainer")
+      for (const s of d.stacks?.stacks ?? []) {
+        const path = s.managed ? portainerStackPath(s) : null;
+        if (!path) continue;
+        const link = toolHref(t, path);
+        items.push({
+          id: `tool:portainer:${s.name}`,
+          group: "tools",
+          title: `Stack ${s.name} in Portainer`,
+          hint: serviceTitle(s),
+          keywords: `portainer stack open ${s.name} ${s.git ? repoName(s.git.url) : ""}`,
+          icon: Ship,
+          searchOnly: true,
+          href: link,
+          run: () => openTool(link),
+        });
+      }
+  }
   return items;
 });
 

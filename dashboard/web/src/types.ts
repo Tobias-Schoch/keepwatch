@@ -118,6 +118,8 @@ export interface LogLine {
 
 export interface Stack {
   id: number | null;
+  /** Portainer environment of the stack (links into Portainer); null when unknown. */
+  endpointId: number | null;
   name: string;
   source: "git" | "file" | "compose";
   git: { url: string; ref: string } | null;

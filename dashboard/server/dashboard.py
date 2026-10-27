@@ -1318,13 +1318,17 @@ def collect_stacks():
         except ApiError as e:
             reason = e.message
 
+    # Environment of the stacks (Portainer's local Docker): also for compose projects Portainer deployed
+    # but did not list (not connected right now) - links into Portainer need it.
+    endpoints = collections.Counter(s.get("EndpointId") for s in raw if s.get("EndpointId") is not None)
+    endpoint = endpoints.most_common(1)[0][0] if endpoints else None
     stacks, seen = [], set()
     for s in raw:
         git = s.get("GitConfig")
         name = s.get("Name")
         seen.add(name)
         stacks.append({
-            "id": s.get("Id"), "name": name, "source": "git" if git else "file",
+            "id": s.get("Id"), "endpointId": s.get("EndpointId"), "name": name, "source": "git" if git else "file",
             "git": {"url": git.get("URL", ""), "ref": (git.get("ReferenceName") or "").replace("refs/heads/", "")}
             if git else None,
             "autoUpdate": (s.get("AutoUpdate") or {}).get("Interval") or None,
@@ -1340,7 +1344,7 @@ def collect_stacks():
         wd = workdir.get(project, "")
         m = re.match(r"^/data/compose/(\d+)", wd)
         stacks.append({
-            "id": int(m.group(1)) if m else None, "name": project,
+            "id": int(m.group(1)) if m else None, "endpointId": endpoint if m else None, "name": project,
             "source": "compose" if not m else "git",
             "git": None, "autoUpdate": None, "containers": sorted(names), "envCount": None,
             "updatedAt": None, "updatedBy": None, "managed": bool(m),

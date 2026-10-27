@@ -1,8 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { api } from "./api";
 import { has } from "./config";
+import { num } from "./format";
 
 /** Uptime per site – /api/uptime and /api/uptime/site (API.md → "Uptime", backend: server/uptime.py). Module proxy. */
+
+/** Uptime percentage for display: always 4 decimals ("99.9988"), the API sends 6. Without the % sign. */
+export const fmtUptime = (v: number) => num(v, 4);
 
 export interface UptimeDay {
   /** YYYY-MM-DD, in the server's local timezone */
