@@ -84,7 +84,7 @@ KW_PORTAINER_WEBHOOKS=""        # deploy webhooks reachable from the internet: "
 KW_DASHBOARD_PORT="9004"        # on 127.0.0.1 only - `./keepwatch tunnel` or the macOS app
 KW_UPTIME_PROBES=""             # sites whose "/" says nothing: "<container>=/health" or "<container>=/health:200,204"
 KW_DASHBOARD_PASSKEY="yes"      # dangerous actions need a passkey (Touch ID, Windows Hello, security key)
-KW_EXTRA_UIS=""                 # your own admin UIs on 127.0.0.1, for the tunnel: "Name=port Other=port"
+KW_EXTRA_UIS=""                 # your own admin UIs on 127.0.0.1, for the tunnel: "Name=port Other=port/start/path/"
 # Keepwatch updates from the dashboard: when the branch on GitHub is newer than what the server runs,
 # the dashboard offers to install it (passkey). The server then downloads that exact commit and runs it
 # as root - the same trust as deploying it yourself. A fork: your "owner/repo". "" = never from the dashboard.

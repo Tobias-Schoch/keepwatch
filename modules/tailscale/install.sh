@@ -34,7 +34,7 @@ fi
 # (Tailscale AND SSH key). The serve config lives in /var/lib/tailscale and
 # would even come back with a restore, so it is checked on every run.
 UI_PORTS="$KW_DASHBOARD_PORT $KW_PROXY_ADMIN_PORT $KW_PORTAINER_PORT"
-for ui in $KW_EXTRA_UIS; do UI_PORTS+=" ${ui##*=}"; done
+for ui in $KW_EXTRA_UIS; do p=${ui##*=}; UI_PORTS+=" ${p%%/*}"; done
 serve_has() {  # serve_has <port>...: does tailscale serve publish one of these ports?
   tailscale serve status --json 2>/dev/null | python3 -c '
 import json, sys

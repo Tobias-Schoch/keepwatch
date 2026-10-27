@@ -138,11 +138,17 @@ def active(conf: dict | None = None) -> set:
 
 
 def extra_uis(conf: dict) -> list:
+    """KW_EXTRA_UIS="Name=port Other_name=port/start/path/": underscores become spaces; the optional
+    path is where the UI opens (for UIs whose "/" redirects to an internal container port)."""
     out = []
     for item in conf.get("KW_EXTRA_UIS", "").split():
-        name, _, port = item.rpartition("=")
+        name, _, rest = item.rpartition("=")
+        port, slash, path = rest.partition("/")
         if name and port.isdigit():
-            out.append({"name": name.replace("_", " "), "port": int(port)})
+            ui = {"name": name.replace("_", " "), "port": int(port)}
+            if slash:
+                ui["path"] = "/" + path
+            out.append(ui)
     return out
 
 
