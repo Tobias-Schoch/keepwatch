@@ -17,7 +17,9 @@ Usage: ./keepwatch <command>
                              bring the server in line with keepwatch.conf
   deploy --force             also when the server runs a newer Keepwatch (updated from the dashboard)
   deploy --fresh             new server: set up, restore from backup, set up again
-  modules                    list modules and whether they are on
+  deploy --take-over-modules write modules switched in the dashboard into keepwatch.conf without asking
+  deploy --yes               ask nothing on this computer (keepwatch.conf stays as it is)
+  modules                   list modules and whether they are on
   enable <module>...         switch modules on (with what they need), then deploy
   disable <module>...        switch modules off (and what needs them), then deploy
 

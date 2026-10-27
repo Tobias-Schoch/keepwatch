@@ -3,12 +3,14 @@
 # connection is shared and $TMP is a scratch directory that goes at exit).
 # Copies the repository to /opt/keepwatch on the server and runs lib/apply.sh there.
 
-MODE=apply APPLY_ARGS=() DRY=0 FORCE=0 UI_STALE=""
+MODE=apply APPLY_ARGS=() DRY=0 FORCE=0 UI_STALE="" ASK=1 TAKE_OVER=0
 while (( $# )); do
   case $1 in
     --fresh) MODE=fresh ;;
     --dry-run) APPLY_ARGS+=(--dry-run); DRY=1 ;;
     --force) FORCE=1 ;;
+    --yes) ASK=0 ;;                      # no questions on this computer: keepwatch.conf stays as it is
+    --take-over-modules) TAKE_OVER=1 ;;  # module switches from the dashboard go into keepwatch.conf
     --only)
       # Ends up in a command line on the server: module ids only.
       [[ ${2:-} =~ ^[a-z0-9,-]+$ ]] || { echo "--only needs module ids, e.g. --only firewall,fail2ban" >&2; exit 2; }
@@ -76,13 +78,14 @@ fi
 remote "command -v rsync >/dev/null || { $SUDO apt-get -o DPkg::Lock::Timeout=600 update -q && $SUDO apt-get -o DPkg::Lock::Timeout=600 install -y -q rsync; } >/dev/null" \
   || { echo "Could not install rsync on the server." >&2; exit 1; }
 
-# One deploy or update at a time (lib/apply.sh and keepwatch-self-update take the same lock).
+# One deploy, update or module switch at a time (lib/apply.sh, keepwatch-self-update and
+# keepwatch-modules take the same lock).
 # The copy below runs under it too: an update from the dashboard swaps /opt/keepwatch.
 LOCK=/run/keepwatch.lock RSYNC_PATH=rsync
 if remote "command -v flock >/dev/null"; then
   if ! remote "$SUDO flock -n $LOCK true"; then
-    echo "Keepwatch is being set up on $HOST right now (an update from the dashboard, or a deploy from" >&2
-    echo "another computer). Try again in a few minutes." >&2
+    echo "Keepwatch is being set up on $HOST right now (an update or a module switched in the dashboard," >&2
+    echo "or a deploy from another computer). Try again in a few minutes." >&2
     exit 1
   fi
   RSYNC_PATH="flock -w 300 $LOCK rsync"
@@ -110,6 +113,38 @@ if (( ! FORCE )) && [[ $srv_source == dashboard && $srv_commit =~ ^[0-9a-f]{40}$
   fi
 fi
 
+# --- Module switches from the dashboard -------------------------------------------------
+# The dashboard switches add-ons on the server (this file; it wins over KW_MODULES there), so
+# copying keepwatch.conf cannot undo them - but both would drift apart unnoticed. lib/kwconf.py
+# says what was switched and asks whether keepwatch.conf takes it over. Without a terminal
+# nobody is asked, and keepwatch.conf stays as it is.
+OVERRIDE=/etc/keepwatch/modules-override.json
+remote "$SUDO cat $OVERRIDE 2>/dev/null" > "$TMP/override.json" 2>/dev/null || true
+# What the last deploy copied: a module switched here since then, the other way round, is a conflict.
+remote "$SUDO grep -h '^KW_MODULES=' /opt/keepwatch/keepwatch.conf 2>/dev/null" > "$TMP/deployed.conf" 2>/dev/null || true
+if (( DRY )); then how=--report
+elif (( TAKE_OVER )); then how=--accept
+elif (( ASK )) && [[ -t 0 ]]; then how=--ask
+else how=--keep; fi
+python3 "$LIB/kwconf.py" take-over "$TMP/override.json" "$TMP/deployed.conf" "$how"
+KW_MODULES=$(python3 "$LIB/kwconf.py" get KW_MODULES)
+
+# The dashboard's switches keepwatch.conf agrees with now (taken over above, or switched the same
+# way here) are cleared on the server: from now on keepwatch.conf says it. Read again after the
+# apply - a switch made in the dashboard meanwhile stays.
+sync_dashboard_switches() {  # [--remind]
+  local ids
+  remote "$SUDO cat $OVERRIDE 2>/dev/null" > "$TMP/override.json" 2>/dev/null || true
+  ids=$(python3 "$LIB/kwconf.py" override-synced "$TMP/override.json" "$SENT_MODULES" "$@") || return 0
+  [[ -n $ids && $ids =~ ^[a-z0-9\ -]+$ ]] || return 0
+  # The copy just deployed, like lib/apply.sh: /usr/local/sbin/keepwatch-modules comes with the dashboard module.
+  if remote "$SUDO python3 $DEST/lib/kwmodules.py sync-done $ids" >/dev/null; then
+    echo "  dashboard module switches now in ${CONF_FILE##*/}: $ids"
+  else
+    echo "  note: could not clear the dashboard's switches for $ids on the server; they stay in effect" >&2
+  fi
+}
+
 # --- Copy ---------------------------------------------------------------------------------
 # A dry run goes to a scratch copy: the dashboard runs from /opt/keepwatch and
 # reads its keepwatch.conf, so the live copy must not change.
@@ -134,6 +169,7 @@ RSYNC=(rsync -rlptz --rsync-path="$RSYNC_PATH" -e "$RSH")
   --exclude 'dashboard/web/src' --exclude desktop --exclude docs --exclude '*.tmp' \
   --exclude '/*.conf' --exclude /VERSION.json \
   ./ "$RHOST:$DEST/"
+SENT_MODULES=$KW_MODULES
 "${RSYNC[@]}" "$CONF_FILE" "$RHOST:$DEST/keepwatch.conf"
 "${RSYNC[@]}" "$INFO" "$RHOST:$DEST/VERSION.json"
 # Copies from before -rlptz still carry the old owner.
@@ -168,7 +204,7 @@ APPLY="$SUDO bash $DEST/lib/apply.sh ${APPLY_ARGS[*]:-}"
 case $MODE in
   apply)
     remote_tty "$APPLY"
-    if (( DRY )); then remote "$SUDO rm -rf $DEST"; fi ;;
+    if (( DRY )); then remote "$SUDO rm -rf $DEST"; else sync_dashboard_switches; fi ;;
   fresh)
     remote_tty "$APPLY"
     remote_tty "$SUDO bash /opt/keepwatch/modules/backup/restore.sh"
@@ -177,6 +213,8 @@ case $MODE in
     trust_server_host_keys
     # Keys and data are back now - this run brings everything up with them.
     remote_tty "$APPLY"
+    # The restore brought the old server's switches from the dashboard back (/etc/keepwatch).
+    sync_dashboard_switches --remind
     ;;
 esac
 
@@ -191,7 +229,7 @@ except ValueError:
   if [[ -n $TS_NAME && $TS_NAME != "$HOST" ]]; then
     echo
     echo "  Tailscale is up: this server is $TS_NAME in your tailnet."
-    if [[ -t 0 ]] && read -rp "  Use it for deploy, tunnel and ssh from now on (KW_HOST)? [Y/n] " a && [[ ! $a =~ ^[nN] ]]; then
+    if (( ASK )) && [[ -t 0 ]] && read -rp "  Use it for deploy, tunnel and ssh from now on (KW_HOST)? [Y/n] " a && [[ ! $a =~ ^[nN] ]]; then
       python3 - "$TS_NAME" <<'PY'
 import sys
 sys.path.insert(0, "lib")

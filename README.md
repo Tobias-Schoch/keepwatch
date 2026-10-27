@@ -76,6 +76,32 @@ are handled), and the next deploy installs or cleanly uninstalls it. Data is nev
 Presets: **Web** = websites and apps behind a reverse proxy · **Docker** = containers without public
 websites · **Server** = hardened server without Docker · **Minimal** = the bare minimum.
 
+### Switching modules in the dashboard
+
+The add-ons the server works fine without can also be switched in the dashboard: `lynis`, `image-scan`,
+`log-archive`, `ban-history`, `auditd`, `auto-updates` and `backup`. Everything that decides whether you
+get in and whether your sites run (SSH, firewall, fail2ban, Tailscale, Docker, proxy) stays with
+`keepwatch.conf`, so a deploy from your computer can check it.
+
+A switch from the dashboard is kept on the server (`/etc/keepwatch/modules-override.json`) and wins over
+`KW_MODULES` there, so a deploy never undoes it. To keep `keepwatch.conf` the one place that says what
+runs, the next deploy notices it and asks:
+
+```
+Switched in the dashboard since your last deploy: lynis on, image-scan off.
+Take this over into keepwatch.conf? [Y/n]
+```
+
+- **Yes** edits `KW_MODULES` like `./keepwatch enable|disable` would. If that also switches another
+  module on or off (a dependency), deploy says which and asks again. After the deploy the server forgets
+  the switches `keepwatch.conf` now agrees with.
+- **No** leaves `keepwatch.conf` alone; the dashboard's choice stays in effect, and the next deploy asks again.
+- **No terminal, or `--yes`**: nothing changes in `keepwatch.conf`, the switch stays, one warning line.
+  `--take-over-modules` takes it over without asking (but never switches off more than the dashboard did).
+- **A conflict** (you switched a module in `keepwatch.conf` since the last deploy, the dashboard the other
+  way) is named in the question. Until `keepwatch.conf` agrees, the dashboard's choice stays in effect.
+- `--dry-run` only reports.
+
 ## How you reach things
 
 ```
@@ -99,6 +125,9 @@ opens the tunnel for you.
 ./keepwatch deploy --dry-run       show what would be installed or removed
 ./keepwatch deploy --fresh         new server: set up, restore from backup, set up again
 ./keepwatch deploy --force         also over a newer Keepwatch the dashboard installed
+./keepwatch deploy --take-over-modules
+                                   write modules switched in the dashboard into keepwatch.conf, no question
+./keepwatch deploy --yes           ask nothing on this computer (keepwatch.conf stays as it is)
 ./keepwatch modules                list modules and whether they are on
 ./keepwatch enable|disable <m>     switch modules (with dependencies)
 ./keepwatch tunnel                 dashboard and admin UIs on this computer
