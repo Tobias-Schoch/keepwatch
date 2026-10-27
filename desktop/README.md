@@ -153,6 +153,12 @@ because of this Mac (Tailscale off, no key, host key, ports - no server alarm), 
 Red only after 2 failures in a row (after the first one it checks again after 15 s). Notifications
 only on the change to red and back; the problems themselves are in the dashboard.
 
+The menu has no section headers and no shortcuts (those are in the window): a status line such as
+"vps · reachable · 38 ms", at most three problems below it (critical first, then "N more ..."), "This
+Mac" only as an indented cause with one button when Tailscale or the tunnel fails, "Pull Backup" with
+its state as a second line, the web UIs and Terminal (Option: open in browser / copy SSH command), Lock
+(Option: Open at Login) and Quit.
+
 Without a window the app lives in the menu bar only; clicking the app icon brings the window back.
 "Open at Login" writes `~/Library/LaunchAgents/io.github.keepwatch.desktop.login.plist`, which starts
 the installed app with `--hidden` (no window) and `KeepAlive` / `SuccessfulExit = false`: launchd

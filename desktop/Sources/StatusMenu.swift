@@ -42,61 +42,72 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let d = AppDelegate.shared
         menu.removeAllItems()
 
-        // Server: everything that comes from the server
-        menu.addItem(.sectionHeader(title: Server.host.isEmpty ? "Server" : "Server · \(Server.host)"))
-        let line = s.isReady && s.health.isEmpty ? "All good · \(s.serverText)"
-            : s.phase == .ready || s.phase == .serverDown ? s.serverText.prefix(1).uppercased() + s.serverText.dropFirst()
-            : s.phase == .noConfig ? "Not set up - run ./keepwatch desktop"
-            : s.phase == .tunnelFailed ? "Not checked - this Mac's SSH tunnel is down"
-            : s.phase == .tunnel ? "Checking - opening the SSH tunnel"
-            : s.phase == .checking ? "Checking ..."
-            : "Not checked - Tailscale on this Mac is not connected"
-        menu.addItem(info(line, dot: s.trayLevel))
-        for p in s.health.prefix(6) {
+        // Server: one line, no section headers - the dots say what each line is about.
+        // Short name (first label of the host), the full name is in the tooltip.
+        let short = Server.host.isEmpty ? "Server" : Server.host.split(separator: ".").first.map(String.init) ?? Server.host
+        let macPhases: [Phase] = [.noConfig, .connecting, .tailscaleOff, .needsLogin, .missing, .tunnel, .tunnelFailed]
+        let macProblem = macPhases.contains(s.phase)
+        let macBusy = s.phase == .connecting || s.phase == .tunnel
+        let state = s.phase == .noConfig ? "not set up" : macProblem ? (macBusy ? "checking" : "not checked") : s.serverText
+        let head = info("\(short) · \(state)", dot: s.trayLevel)
+        head.toolTip = Server.host.isEmpty ? nil : Server.host
+        menu.addItem(head)
+        // At most three problems (critical first), the rest is in the dashboard.
+        let health = s.health.filter(\.isCrit) + s.health.filter { !$0.isCrit }
+        for p in health.prefix(3) {
             let i = MainMenu.item(p.title, #selector(AppDelegate.showDashboard(_:)), "", d)
             i.image = StatusIcon.dot(p.isCrit ? .crit : .warn)
             i.toolTip = p.detail
             i.indentationLevel = 1
             menu.addItem(i)
         }
+        if health.count > 3 {
+            let more = MainMenu.item("\(health.count - 3) more in the dashboard ...", #selector(AppDelegate.showDashboard(_:)), "", d)
+            more.indentationLevel = 1
+            menu.addItem(more)
+        }
 
-        // This Mac: only its own connection
-        menu.addItem(.sectionHeader(title: "This Mac"))
-        menu.addItem(info(s.macText, dot: s.macLevel))
-        if !s.isReady && s.phase != .checking && s.phase != .connecting && s.phase != .tunnel {
-            menu.addItem(MainMenu.item(s.phase == .noConfig ? "Check Again" : s.phase == .needsLogin ? "Open Tailscale"
-                                       : s.phase == .tunnelFailed ? "Try Tunnel Again" : "Connect",
-                                       #selector(AppDelegate.connect(_:)), "", d))
+        // This Mac: only when something here is wrong - as an indented cause with one button.
+        if macProblem {
+            let cause = info(s.phase == .noConfig ? "Run ./keepwatch desktop" : s.macText.prefix(1).uppercased() + s.macText.dropFirst(), dot: s.macLevel, hollow: macBusy)
+            cause.indentationLevel = 1
+            menu.addItem(cause)
+        }
+        if !s.isReady && s.phase != .checking && !macBusy {
+            let act = MainMenu.item(s.phase == .noConfig ? "Check Again" : s.phase == .needsLogin ? "Open Tailscale"
+                                    : s.phase == .tunnelFailed ? "Try Tunnel Again" : "Connect",
+                                    #selector(AppDelegate.connect(_:)), "", d)
+            act.indentationLevel = 1
+            menu.addItem(act)
         }
         if AppLock.shared.locked {
-            menu.addItem(info("App locked - actions need Touch ID first", dot: nil))
+            let lock = info("App locked - actions need Touch ID first", dot: nil)
+            lock.image = symbol("lock")
+            menu.addItem(lock)
         }
 
-        // Backup on this Mac: only on request
+        // Backup on this Mac: one line, its state in small print below.
         let b = Backup.shared
-        menu.addItem(.sectionHeader(title: "Backup on This Mac"))
         if b.isRunning {
-            menu.addItem(info(b.step.isEmpty ? "running ..." : b.step.prefix(1).uppercased() + b.step.dropFirst(), dot: nil, hollow: true))
+            let run = info("Backup running", dot: nil, hollow: true)
+            run.subtitle = b.step.isEmpty ? "running ..." : b.step.prefix(1).uppercased() + b.step.dropFirst()
+            menu.addItem(run)
             let stop = MainMenu.item("Cancel", #selector(AppDelegate.cancelBackup(_:)), "", d)
             stop.image = symbol("xmark.circle")
+            stop.indentationLevel = 1
             menu.addItem(stop)
         } else {
-            switch b.phase {
-            case .done, .failed, .cancelled:
-                if let r = b.resultText {
-                    let ok: Level = if case .done = b.phase { .ok } else if case .failed = b.phase { .crit } else { .warn }
-                    let i = info(r, dot: ok)
-                    i.toolTip = r
-                    menu.addItem(i)
-                }
-            case .idle, .running: break
-            }
-            if case .done = b.phase {} else {
-                menu.addItem(info(b.doneToday ? "Pulled today · \(b.lastText)" : "Not pulled today · \(b.lastText)",
-                                  dot: b.doneToday ? .ok : .warn))
-            }
             let fetch = MainMenu.item("Pull Backup", #selector(AppDelegate.fetchBackup(_:)), "", d)
             fetch.image = symbol("externaldrive.badge.icloud")
+            switch b.phase {
+            case .done, .failed, .cancelled:
+                fetch.subtitle = b.resultText
+                fetch.toolTip = b.resultText
+                if case .failed = b.phase { fetch.image = StatusIcon.dot(.crit) }
+            case .idle, .running:
+                fetch.subtitle = b.doneToday ? b.lastText : "not pulled today · \(b.lastText)"
+                if !b.doneToday { fetch.image = StatusIcon.dot(.warn) }
+            }
             menu.addItem(fetch)
             let more = MainMenu.item("Folder, Requirements, Output ...", #selector(AppDelegate.showBackupPanel(_:)), "", d)
             more.image = symbol("slider.horizontal.3")
@@ -105,44 +116,42 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             menu.addItem(more)
         }
 
-        menu.addItem(.separator())
-        let dash = MainMenu.item("Open Dashboard", #selector(AppDelegate.showDashboard(_:)), "", d)
-        dash.image = symbol("macwindow")
-        menu.addItem(dash)
+        // Web UIs. Shortcuts only in the window: here they only worked while the menu was open.
         menu.addItem(.separator())
         for t in Tab.allCases {
-            let i = MainMenu.item(t.title, #selector(AppDelegate.selectTab(_:)), t.shortcut, d)
+            let i = MainMenu.item(t.title, #selector(AppDelegate.selectTab(_:)), "", d)
             i.tag = t.rawValue
             i.image = symbol(t.symbol)
             menu.addItem(i)
             // Option held: open in browser
-            let alt = MainMenu.item("Open \(t.title) in Browser", #selector(AppDelegate.openTabInBrowser(_:)), t.shortcut, d)
+            let alt = MainMenu.item("Open \(t.title) in Browser", #selector(AppDelegate.openTabInBrowser(_:)), "", d)
             alt.tag = t.rawValue
             alt.image = symbol("safari")
-            alt.keyEquivalentModifierMask = [.command, .option]
+            alt.keyEquivalentModifierMask = [.option]
             alt.isAlternate = true
             menu.addItem(alt)
         }
-        let term = MainMenu.item("Open Terminal", #selector(AppDelegate.openTerminal(_:)), "t", d)
+        let term = MainMenu.item("Terminal", #selector(AppDelegate.openTerminal(_:)), "", d)
         term.image = symbol("terminal")
         menu.addItem(term)
-        let copy = MainMenu.item("Copy SSH Command", #selector(AppDelegate.copySSH(_:)), "t", d)
+        let copy = MainMenu.item("Copy SSH Command", #selector(AppDelegate.copySSH(_:)), "", d)
         copy.image = symbol("doc.on.doc")
-        copy.keyEquivalentModifierMask = [.command, .option]
+        copy.keyEquivalentModifierMask = [.option]
         copy.isAlternate = true
         menu.addItem(copy)
 
+        // "Open at Login" is set once: in the window's app menu, and here with Option.
         menu.addItem(.separator())
-        menu.addItem(MainMenu.item("Open Window", #selector(AppDelegate.openMain(_:)), "0", d))
         if !AppLock.shared.locked {
-            let lk = MainMenu.item("Lock", #selector(AppDelegate.lockNow(_:)), "l", d)
+            let lk = MainMenu.item("Lock", #selector(AppDelegate.lockNow(_:)), "", d)
             lk.image = symbol("lock")
             menu.addItem(lk)
+            let login = MainMenu.item("Open at Login", #selector(AppDelegate.toggleLogin(_:)), "", d)
+            login.state = s.loginItem ? .on : .off
+            login.keyEquivalentModifierMask = [.option]
+            login.isAlternate = true
+            menu.addItem(login)
         }
-        let login = MainMenu.item("Open at Login", #selector(AppDelegate.toggleLogin(_:)), "", d)
-        login.state = s.loginItem ? .on : .off
-        menu.addItem(login)
-        menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Keepwatch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
