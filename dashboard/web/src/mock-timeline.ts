@@ -13,7 +13,10 @@ const SERVICES: Record<string, string> = {
   blog: "Blog",
   wiki: "Wiki",
   photos: "Photos",
-  keepwatch: "Infrastructure",
+  // Not managed by Portainer: Keepwatch's own two (stackNames.ts) and one started by hand.
+  proxy: "Proxy Manager",
+  portainer: "Portainer",
+  vaultwarden: "Vaultwarden",
 };
 
 const L = {
@@ -148,8 +151,8 @@ function build(): TlEvent[] {
     t: at(0, 4, 6, 14),
     tEnd: at(0, 4, 7, 2),
     kind: "services",
-    title: "After boot: 10 containers in 6 services started",
-    detail: "Blog, Infrastructure, Photos, Shop, Web, Wiki",
+    title: "After boot: 11 containers started in 8 services",
+    detail: "Blog, Photos, Portainer, Proxy Manager, Shop, Vaultwarden, Web, Wiki",
     source: "docker",
     link: { view: "services" },
   });
@@ -194,7 +197,9 @@ function build(): TlEvent[] {
   push({ t: at(2, 16, 12, 5), kind: "services", title: "Web redeployed (1 container)", detail: "web · via Portainer · commit a93e7fb (main) · by admin", service: "web", source: "docker", needs: ["docker", "portainer"] });
   push({ t: at(2, 17, 40, 18), kind: "services", title: "Shop redeployed (3 containers)", detail: "shop-api, shop-db, shop-frontend · GitHub webhook · via Portainer · commit 4c1e0b2 (main) · by admin", service: "shop", source: "docker", needs: ["docker", "portainer"] });
   push({ t: at(3, 19, 48, 30), kind: "system", title: "Keepwatch deployed · ce714fc", detail: "./keepwatch deploy · changed: dashboard, fail2ban, firewall", source: "deploy", link: null });
-  push({ t: at(3, 19, 49, 2), kind: "services", title: "Infrastructure redeployed (2 containers)", detail: "keepwatch-proxy-1, keepwatch-portainer-1 · during ./keepwatch deploy", service: "keepwatch", source: "docker", needs: ["docker", "proxy"] });
+  push({ t: at(3, 19, 49, 2), kind: "services", title: "Proxy Manager redeployed (1 container)", detail: "keepwatch-proxy-1 · during ./keepwatch deploy", service: "proxy", source: "docker", needs: ["docker", "proxy"] });
+  push({ t: at(3, 19, 49, 9), kind: "services", title: "Portainer redeployed (1 container)", detail: "keepwatch-portainer-1 · during ./keepwatch deploy", service: "portainer", source: "docker", needs: ["docker", "portainer"] });
+  push({ t: at(6, 21, 14, 37), kind: "services", title: "Vaultwarden redeployed (1 container)", detail: "vaultwarden", service: "vaultwarden", source: "docker", needs: ["docker"] });
   push({ t: at(4, 10, 5, 0), kind: "dashboard", title: "Update started: postgres:16-alpine", detail: "POST /api/updates/apply", service: "shop", source: "audit", needs: ["docker"] });
   push({ t: at(4, 10, 5, 2), tEnd: at(4, 10, 6, 40), kind: "services", title: "Update applied: postgres:16-alpine", detail: "postgres:16-alpine updated to 16.6.", service: "shop", source: "updates" });
   push({ t: at(5, 3, 12, 30), kind: "dashboard", title: "Backup started manually", detail: "POST /api/backups/run", source: "audit", link: L.backup, needs: ["backup"] });

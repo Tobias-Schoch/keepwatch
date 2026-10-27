@@ -10,6 +10,7 @@ import { useNav } from "../nav";
 import { openSetting } from "./settingsOpen";
 import type { Container, Docker, Site, Sites, Stack, Stacks } from "../types";
 import { useUpdates } from "../updates";
+import { capitalize, INFRA_IMAGE, stackName, unmanagedName } from "../stackNames";
 import { portainerStackPath, toolHref, useTool } from "../tools";
 import { fmtUptime, useUptime, type UptimeSite, type UptimeSummary } from "../uptime";
 import { Detail, HEALTH_LABEL, STATE_LABEL, stateTone } from "./Containers";
@@ -31,8 +32,9 @@ import "./servicesPalette";
  * repo and deployed commit with variables and redeploy, sites (grade, problems, uptime, access),
  * images only with an update, vulnerabilities or "roll back", containers (problems, memory · CPU). Details in tooltips.
  * Site → service comes from the proxy target ("container:port"): the container belongs to the stack,
- * so the site does too. The infrastructure stack (Proxy Manager, Portainer) is "Infrastructure",
- * sites without a known container end up under "Other".
+ * so the site does too. Compose projects Portainer does not manage are named by stackNames.ts: Keepwatch's own
+ * ("Proxy Manager", "Portainer") sort after the services, hand-started ones show "not managed by Portainer".
+ * Sites without a known container end up under "Other".
  *
  * Modules: the page needs docker. Stacks, variables and redeploy need portainer – without it, containers
  * are grouped by their compose project. Sites, certificates, grades and uptime need proxy – without it a row has no
@@ -42,6 +44,8 @@ import "./servicesPalette";
 interface Block {
   key: string;
   title: string;
+  /** Small secondary text next to the title ("not managed by Portainer"), not part of the title (jumps match it exactly). */
+  hint: string | null;
   stack: Stack | null;
   kind: "stack" | "infra" | "other";
   containers: Container[];
@@ -58,27 +62,17 @@ function blockTone(b: Block): Tone {
   return worst([...b.containers.map(stateTone), ...b.sites.filter((s) => s.enabled).map(siteTone)]);
 }
 
-const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-
-/** Display name: the repo name if it has capitals ("MyShop"), else the capitalized stack name ("Shop"). Same as serviceTitle() in the palette. */
-function titleOf(s: Stack): string {
-  if (!s.managed) return "Infrastructure";
-  const repo = s.git ? repoName(s.git.url).split("/").pop() ?? "" : "";
-  if (/[A-Z]/.test(repo)) return repo;
-  return capitalize(s.name);
-}
-
-/** Keepwatch's own containers (proxy, Portainer), recognized by image. */
-const INFRA_IMAGE = /(^|\/)(nginx-proxy-manager|portainer-(ce|ee))(:|@|$)/;
-
-function buildBlocks(stacks: Stack[], containers: Container[], sites: Site[]): Block[] {
+/** `portainer`: the module is on – only then is "not managed by Portainer" worth saying. */
+function buildBlocks(stacks: Stack[], containers: Container[], sites: Site[], portainer: boolean): Block[] {
   const used = new Set<string>();
   const blocks: Block[] = stacks.map((s) => {
     const list = containers.filter((c) => s.containers.includes(c.name) || (c.project !== null && c.project === s.name));
     list.forEach((c) => used.add(c.name));
+    const name = stackName(s, list);
     return {
       key: s.name,
-      title: titleOf(s),
+      title: name.title,
+      hint: portainer ? name.hint : null,
       stack: s,
       kind: s.managed ? "stack" : "infra",
       containers: list,
@@ -92,10 +86,11 @@ function buildBlocks(stacks: Stack[], containers: Container[], sites: Site[]): B
   for (const [project, list] of projects) {
     list.forEach((c) => used.add(c.name));
     const infra = list.some((c) => INFRA_IMAGE.test(c.image));
-    blocks.push({ key: `~project:${project}`, title: infra ? "Infrastructure" : capitalize(project), stack: null, kind: infra ? "infra" : "stack", containers: list, sites: [], missing: [] });
+    const name = infra ? unmanagedName(project, list.map((c) => c.image)) : { title: capitalize(project), hint: null };
+    blocks.push({ key: `~project:${project}`, title: name.title, hint: portainer ? name.hint : null, stack: null, kind: infra ? "infra" : "stack", containers: list, sites: [], missing: [] });
   }
   const loose = containers.filter((c) => !used.has(c.name));
-  const other: Block = { key: "~other", title: "Other", stack: null, kind: "other", containers: loose, sites: [], missing: [] };
+  const other: Block = { key: "~other", title: "Other", hint: null, stack: null, kind: "other", containers: loose, sites: [], missing: [] };
   for (const site of sites) {
     const host = siteHost(site);
     const b = blocks.find((x) => x.containers.some((c) => c.name === host) || x.stack?.containers.includes(host));
@@ -219,6 +214,7 @@ function ServiceRow({ b, open, u, uptime, connected, site, onContainer, onEnv, o
         </button>
         <StateDot tone={tone} />
         <h2 className="d-block-title">{b.title}</h2>
+        {b.hint && <span className="svc-issue -ml-2 whitespace-nowrap">{b.hint}</span>}
         {!open && (
           <span className="svc-info">
             <ServiceScore sites={live.map((x) => ({ id: x.id, domain: x.domains[0] }))} />
@@ -336,7 +332,7 @@ function ServicesBody() {
           const list = d.containers;
           const stacks = (portainer && st.data?.stacks) || [];
           const sd = proxy ? sitesPoll.data : null;
-          const blocks = buildBlocks(stacks, list, sd?.sites ?? []);
+          const blocks = buildBlocks(stacks, list, sd?.sites ?? [], portainer);
           const services = blocks.filter((b) => b.kind === "stack");
           const bad = blocks.filter((b) => blockTone(b) !== "ok");
           const connected = st.data?.portainer.connected ?? false;

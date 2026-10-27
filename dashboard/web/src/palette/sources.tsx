@@ -6,7 +6,8 @@ import { HEALTH_LABEL, STATE_LABEL, stateTone } from "../pages/Containers";
 import { siteHost } from "../pages/Sites";
 import { Redeploy, repoName } from "../pages/Stacks";
 import { setServiceOpen, showSite } from "../pages/servicesStore";
-import type { Stack } from "../types";
+import { stackName } from "../stackNames";
+import type { Container, Stack } from "../types";
 import { registerPalette, stackContainers, type PaletteCtx, type PaletteItem } from "./registry";
 import { BackupConfirm, UnbanConfirm } from "./dialogs";
 import { openSetting, settingsIndex } from "../pages/settingsOpen";
@@ -14,12 +15,10 @@ import { openTool, portainerStackPath, toolHref } from "../tools";
 
 /* Built-in palette sources. Template for more: registerPalette((d) => [...]). Every source checks its modules. */
 
-/** Display name as on the Services page: repo name if it has capitals ("MyShop"), else the capitalized stack name ("Shop"). */
-export function serviceTitle(s: Stack): string {
-  if (!s.managed) return "Infrastructure";
-  const repo = s.git ? repoName(s.git.url).split("/").pop() ?? "" : "";
-  if (/[A-Z]/.test(repo)) return repo;
-  return s.name.charAt(0).toUpperCase() + s.name.slice(1);
+/** Display name as on the Services page (stackNames.ts): "MyShop", "Shop", "Proxy Manager", "Portainer", "Myapp".
+ *  Pass the containers so unmanaged projects are recognized by image too. */
+export function serviceTitle(s: Stack, containers: Container[] = []): string {
+  return stackName(s, containers).title;
 }
 
 /** Jump to the service and expand it (details are collapsed on the page). */
@@ -35,7 +34,7 @@ registerPalette((d) => {
   const containers = has("docker") ? d.docker?.containers ?? [] : [];
   const connected = d.stacks?.portainer?.connected ?? false;
   for (const s of has("portainer") ? d.stacks?.stacks ?? [] : []) {
-    const title = serviceTitle(s);
+    const title = serviceTitle(s, containers);
     const cs = stackContainers(s, containers).map((c) => c.name);
     if (s.managed && s.id !== null && connected)
       items.push({
@@ -153,14 +152,14 @@ registerPalette((d) => {
   const sites = has("proxy") ? d.sites?.sites ?? [] : [];
   const items = [];
   for (const s of has("portainer") ? d.stacks?.stacks ?? [] : []) {
-    const title = serviceTitle(s);
+    const { title, hint } = stackName(s, containers);
     const cs = stackContainers(s, containers);
     const bad = cs.filter((c) => stateTone(c) !== "ok").length;
     items.push({
       id: `svc:${s.name}`,
       group: "services" as const,
       title,
-      hint: `${cs.length} ${cs.length === 1 ? "container" : "containers"} · ${bad ? `${bad} with issues` : cs.length ? "healthy" : "none running"}`,
+      hint: [`${cs.length} ${cs.length === 1 ? "container" : "containers"}`, bad ? `${bad} with issues` : cs.length ? "healthy" : "none running", hint].filter(Boolean).join(" · "),
       keywords: `${s.name} ${s.git ? repoName(s.git.url) : ""} ${cs.map((c) => c.name).join(" ")}`,
       icon: Boxes,
       rank: 2,
