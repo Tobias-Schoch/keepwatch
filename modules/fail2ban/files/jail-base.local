@@ -12,12 +12,12 @@
 # through its public domains - it must never ban itself) and KW_TRUSTED_IPS.
 # Written on every deploy to jail.d/00-keepwatch-ips.local.
 ignoreip = 127.0.0.1/8 ::1 %(keepwatch_ignore)s
-# Every further ban of the same address doubles (1 week, 2, 4 ...), up to a
-# year. fail2ban remembers offenders in its database (dbpurgeage in
+# Every further ban of the same address doubles (1 week, 2, 4 ...), up to
+# KW_F2B_MAX_BANTIME (a year by default). fail2ban remembers offenders in its database (dbpurgeage in
 # fail2ban.d/keepwatch.local).
 bantime.increment = true
 bantime.factor = 1
-bantime.maxtime = 52w
+bantime.maxtime = @MAX_BANTIME@
 bantime.overalljails = true
 
 # From the internet: KW_F2B_SSH_MAXRETRY failures in 24 h -> banned.
@@ -36,7 +36,7 @@ findtime     = 24h
 bantime      = @SSH_BANTIME@
 ignoreip     = 127.0.0.1/8 ::1 %(keepwatch_ignore)s @TAILNET@
 
-# Repeat offenders: 2 bans in 30 days -> a year, on ALL ports (80/443 too).
+# Repeat offenders: 2 bans in 30 days -> KW_F2B_MAX_BANTIME, on ALL ports (80/443 too).
 # Bans on "all ports" must hit BEFORE Docker: requests to your sites
 # (80/443) are DNATed by Docker, go through FORWARD and never through INPUT,
 # so a ban in INPUT does not stop them. Hence a chain of its own in
@@ -52,4 +52,4 @@ chain     = f2b-before-docker
 banaction = nftables[type=allports, chain_hook=prerouting, chain_priority=-150, blocktype=drop]
 maxretry  = 2
 findtime  = 30d
-bantime   = 52w
+bantime   = @MAX_BANTIME@

@@ -41,13 +41,14 @@ KW_SSH_PUBLIC="yes"             # "no": SSH only through Tailscale (needs the ta
 KW_PUBLIC_UDP=""                # UDP ports containers may receive from the internet (host UDP is not filtered)
 
 # --- fail2ban -------------------------------------------------------------------
-KW_F2B_SSH_BANTIME="1w"         # first ban; repeat offenders get doubled up to a year
+KW_F2B_SSH_BANTIME="1w"         # first ban; repeat offenders get doubled up to KW_F2B_MAX_BANTIME
+KW_F2B_MAX_BANTIME="52w"        # longest ban of any kind (doubling, repeat offenders on all ports), e.g. "90d"
 KW_F2B_SSH_MAXRETRY="7"         # failed SSH logins in 24 h before a ban (internet and tailnet); 1 = strict
 KW_F2B_WEB_SCANNER="yes"        # ban clients probing for .env, .git, wp-login, ... (needs proxy)
 KW_F2B_APP_LOGIN="yes"          # ban after 5 failed logins (401/403 on login/admin paths) in 1 h (needs proxy)
 
 # --- ban-history ------------------------------------------------------------------
-KW_BANHISTORY_DAYS="60"         # keep re-banning a past SSH attacker this long after its last attempt
+KW_BANHISTORY_DAYS="60"         # keep re-banning a past SSH attacker this long after its last attempt (at most KW_F2B_MAX_BANTIME)
 KW_BANHISTORY_SPARE_COUNTRIES="" # e.g. "DE AT": spare addresses from there with few attempts (hijacked home lines; needs dashboard)
 KW_BANHISTORY_SPARE_BELOW="100" # ... with fewer attempts than this
 

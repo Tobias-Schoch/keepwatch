@@ -233,7 +233,7 @@ const settings: Settings = {
     ? { configured: false, name: "Remote", repo: null, env: [], rcloneConf: false, check: null }
     : { configured: true, name: "S3", repo: REMOTE_REPO, env: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"], rcloneConf: false, check: { ok: true, at: now() - 11 * 3600, message: "Repository reachable and readable (14 snapshots)." } },
   portainer: FRESH ? { tokenSet: false, connected: false, reason: "No access token yet." } : { tokenSet: true, connected: true, reason: null },
-  fail2ban: { sshMaxretry: 7, maxretry: 7, findtimeHours: 24, bantimeHours: 168, recidiveMaxretry: 2, recidiveFindtimeDays: 30, recidiveBantimeDays: 365, ignoreip: [] },
+  fail2ban: { sshMaxretry: 7, maxretry: 7, findtimeHours: 24, bantimeHours: 168, recidiveMaxretry: 2, recidiveFindtimeDays: 30, recidiveBantimeDays: 364, maxBantimeDays: 364, ignoreip: [] },
   updates: { autoReboot: true, rebootTime: "04:00" },
   myIps: MY_IPS,
   tailscale: FRESH

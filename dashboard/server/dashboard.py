@@ -1817,6 +1817,15 @@ def backup_schedule() -> str:
                       default=config.get("KW_BACKUP_TIME", "03:00"))
 
 
+def f2b_max_ban_days() -> int:
+    """KW_F2B_MAX_BANTIME (fail2ban time like 90d, 12w; default 52w) in whole days: no ban may be longer."""
+    m = re.fullmatch(r"([1-9][0-9]*)([mhdw])", config.get("KW_F2B_MAX_BANTIME", "52w").strip())
+    if not m:
+        return 364
+    secs = int(m.group(1)) * {"m": 60, "h": 3600, "d": 86400, "w": 604800}[m.group(2)]
+    return max(1, secs // 86400)
+
+
 def f2b_get(jail: str, key: str) -> str:
     return run(["fail2ban-client", "get", jail, key]).strip()
 
@@ -1847,7 +1856,7 @@ def fail2ban_settings() -> dict:
             "bantimeHours": max(1, num(f2b_get(main, "bantime"), 604800) // 3600),
             "recidiveMaxretry": num(f2b_get(config.JAIL_RECIDIVE, "maxretry"), 2),
             "recidiveFindtimeDays": max(1, rec_find // 86400),
-            "recidiveBantimeDays": max(1, rec // 86400), "ignoreip": ignore}
+            "recidiveBantimeDays": max(1, rec // 86400), "maxBantimeDays": f2b_max_ban_days(), "ignoreip": ignore}
 
 
 def remote_settings(cfg: dict) -> dict:
@@ -2092,10 +2101,12 @@ def put_fail2ban(body):
     else:
         maxretry = None
     findtime = _int(body, "findtimeHours", 1, 720)
-    bantime = _int(body, "bantimeHours", 1, 8760)
+    # No ban longer than KW_F2B_MAX_BANTIME (keepwatch.conf) - the first one nor the repeat offenders'.
+    max_days = f2b_max_ban_days()
+    bantime = _int(body, "bantimeHours", 1, max_days * 24)
     rec_retry = _int(body, "recidiveMaxretry", 1, 50)
     rec_find = _int(body, "recidiveFindtimeDays", 1, 365)
-    recidive = _int(body, "recidiveBantimeDays", 1, 3650)
+    recidive = _int(body, "recidiveBantimeDays", 1, max_days)
     ips = body.get("ignoreip") or []
     if not isinstance(ips, list):
         raise ApiError(400, "ignoreip must be a list.")

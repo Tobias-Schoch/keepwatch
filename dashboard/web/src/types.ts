@@ -195,6 +195,8 @@ export interface Settings {
     /** Failed SSH logins through Tailscale before a ban (jail sshd-tailscale; null without the tailscale module). */
     maxretry: number | null; findtimeHours: number; bantimeHours: number;
     recidiveMaxretry: number; recidiveFindtimeDays: number; recidiveBantimeDays: number;
+    /** KW_F2B_MAX_BANTIME in days: no ban may be longer (older servers: missing). */
+    maxBantimeDays?: number;
     ignoreip: string[];
   };
   updates: { enabled?: true; autoReboot: boolean; rebootTime: string };

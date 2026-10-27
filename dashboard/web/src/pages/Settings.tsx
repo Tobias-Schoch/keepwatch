@@ -524,6 +524,8 @@ function PortainerBody({ p, reload, close }: { p: Settings["portainer"]; reload:
 function Fail2banBody({ f2b, myIps, reload, close }: { f2b: Settings["fail2ban"]; myIps: string[]; reload: () => void; close: () => void }) {
   const { busy, run } = useAction();
   const [f, setF] = useState({ ...f2b, ignoreip: f2b.ignoreip ?? [] });
+  // No ban longer than KW_F2B_MAX_BANTIME (older servers don't send it: their old limits).
+  const maxBan = f2b.maxBantimeDays ?? 3650;
   // sshMaxretry: from the internet (jail sshd). maxretry: through Tailscale – null without the tailscale module.
   const tailnet = f.maxretry !== null;
   const internet = typeof f.sshMaxretry === "number";
@@ -531,8 +533,8 @@ function Fail2banBody({ f2b, myIps, reload, close }: { f2b: Settings["fail2ban"]
   const [bad, setBad] = useState<string | null>(null);
   const dirty = JSON.stringify(f) !== JSON.stringify({ ...f2b, ignoreip: f2b.ignoreip ?? [] });
   const valid =
-    (!tailnet || intOk(f.maxretry ?? NaN, 1, 50)) && (!internet || intOk(f.sshMaxretry ?? NaN, 1, 50)) && intOk(f.findtimeHours, 1, 720) && intOk(f.bantimeHours, 1, 8760) &&
-    intOk(f.recidiveMaxretry, 1, 50) && intOk(f.recidiveFindtimeDays, 1, 365) && intOk(f.recidiveBantimeDays, 1, 3650);
+    (!tailnet || intOk(f.maxretry ?? NaN, 1, 50)) && (!internet || intOk(f.sshMaxretry ?? NaN, 1, 50)) && intOk(f.findtimeHours, 1, 720) && intOk(f.bantimeHours, 1, maxBan * 24) &&
+    intOk(f.recidiveMaxretry, 1, 50) && intOk(f.recidiveFindtimeDays, 1, 365) && intOk(f.recidiveBantimeDays, 1, maxBan);
   const n = (v: number) => (Number.isFinite(v) ? v : "?");
   const add = (raw: string) => {
     const v = normalize(raw);
@@ -555,16 +557,16 @@ function Fail2banBody({ f2b, myIps, reload, close }: { f2b: Settings["fail2ban"]
           </div>
           <div className="d-fields is-2">
             <NumField id="s-f-find" label="Time window" unit="hours" value={f.findtimeHours} min={1} max={720} onChange={(findtimeHours) => setF({ ...f, findtimeHours })} />
-            <NumField id="s-f-ban" label="First ban" unit="hours" value={f.bantimeHours} min={1} max={8760} onChange={(bantimeHours) => setF({ ...f, bantimeHours })} />
+            <NumField id="s-f-ban" label="First ban" unit="hours" value={f.bantimeHours} min={1} max={maxBan * 24} onChange={(bantimeHours) => setF({ ...f, bantimeHours })} />
           </div>
           <p className="o-hint -mt-2">
             {[internet && `${n(f.sshMaxretry ?? NaN)}× from the internet`, tailnet && `${n(f.maxretry ?? NaN)}× through Tailscale`].filter(Boolean).join(", ") || "Failed logins"} in {dur(f.findtimeHours)} →{" "}
-            {dur(f.bantimeHours)}, then doubled each time (up to 1 year)
+            {dur(f.bantimeHours)}, then doubled each time (up to {maxBan >= 364 ? "1 year" : `${maxBan} days`})
           </p>
           <div className="d-fields is-3">
             <NumField id="s-f-rretry" label="Repeat offenders" unit="bans" value={f.recidiveMaxretry} min={1} max={50} onChange={(recidiveMaxretry) => setF({ ...f, recidiveMaxretry })} />
             <NumField id="s-f-rfind" label="within" unit="days" value={f.recidiveFindtimeDays} min={1} max={365} onChange={(recidiveFindtimeDays) => setF({ ...f, recidiveFindtimeDays })} />
-            <NumField id="s-f-rec" label="then banned for" unit="days" value={f.recidiveBantimeDays} min={1} max={3650} onChange={(recidiveBantimeDays) => setF({ ...f, recidiveBantimeDays })} />
+            <NumField id="s-f-rec" label="then banned for" unit="days" value={f.recidiveBantimeDays} min={1} max={maxBan} onChange={(recidiveBantimeDays) => setF({ ...f, recidiveBantimeDays })} />
           </div>
           <p className="o-hint -mt-2">
             {n(f.recidiveMaxretry)} {f.recidiveMaxretry === 1 ? "ban" : "bans"} in {n(f.recidiveFindtimeDays)} days → {n(f.recidiveBantimeDays)} days on all ports

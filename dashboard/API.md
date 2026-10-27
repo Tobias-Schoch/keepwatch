@@ -993,6 +993,7 @@ Each section is `{ enabled: false }` while its module is off.
               findtimeHours: number; bantimeHours: number;
               recidiveMaxretry: number; recidiveFindtimeDays: number;   // repeat offenders: n bans in x days
               recidiveBantimeDays: number;                              // -> y days, all ports
+              maxBantimeDays: number;   // KW_F2B_MAX_BANTIME in days: the longest any ban may be
               ignoreip: string[] };   // without 127.0.0.1/8, ::1 and the tailnet ranges. Every further ban
                                       // of the same IP doubles (bantime.increment). Module fail2ban
   updates: { enabled: true; autoReboot: boolean; rebootTime: string };  // "04:00" KW_LOCAL_TZ: security updates
@@ -1031,7 +1032,7 @@ Each section is `{ enabled: false }` while its module is off.
   configuration (the data in the repository stays).
 - `PUT /api/settings/portainer` with `{ token: string }` → checks and saves → `{ ok: true }`
 - `PUT /api/settings/fail2ban` with `{ sshMaxretry?, maxretry?, findtimeHours, bantimeHours, recidiveMaxretry, recidiveFindtimeDays, recidiveBantimeDays, ignoreip }`
-  (`sshMaxretry`/`maxretry` 1–50, each optional – a missing one keeps the current value; `maxretry` only with the tailscale module) → writes `/etc/fail2ban/jail.d/zz-keepwatch-dashboard.local`,
+  (`sshMaxretry`/`maxretry` 1–50, each optional – a missing one keeps the current value; `maxretry` only with the tailscale module; `bantimeHours` up to `maxBantimeDays` × 24, `recidiveBantimeDays` up to `maxBantimeDays`) → writes `/etc/fail2ban/jail.d/zz-keepwatch-dashboard.local`,
   tests with `fail2ban-client -t`, reloads.
 - `PUT /api/settings/updates` with `{ autoReboot, rebootTime }` → writes `52-auto-reboot`, the
   `apt-daily-upgrade.timer` override at `rebootTime` and the `apt-daily.timer` override (package

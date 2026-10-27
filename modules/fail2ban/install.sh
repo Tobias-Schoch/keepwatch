@@ -23,7 +23,7 @@ write "$JD/00-keepwatch-ips.local" <<CONF
 # Written by Keepwatch on every deploy - do not edit (set KW_TRUSTED_IPS instead).
 # keepwatch_ignore: this server's own addresses and KW_TRUSTED_IPS.
 # deploy_ip: the address of the most recent ./keepwatch deploy.
-# Every jail ignores both, recidive (a year on all ports) included.
+# Every jail ignores both, recidive (KW_F2B_MAX_BANTIME on all ports) included.
 [DEFAULT]
 deploy_ip = $DEPLOY_IP
 keepwatch_ignore = $IGNORE %(deploy_ip)s
@@ -35,8 +35,14 @@ SSH_PORT=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -un | past
 SSH_PORT=${SSH_PORT:-22}
 TAILNET=""
 enabled tailscale && TAILNET="100.64.0.0/10 fd7a:115c:a1e0::/48"
+# Longest ban of any kind (doubling repeat offenders, recidive): fail2ban time, e.g. 90d, 12w, 52w.
+MAX_BANTIME=${KW_F2B_MAX_BANTIME:-52w}
+if [[ ! $MAX_BANTIME =~ ^[1-9][0-9]*[mhdw]$ ]]; then
+  warn "KW_F2B_MAX_BANTIME='$MAX_BANTIME' is not like 90d or 52w - using 52w"
+  MAX_BANTIME=52w
+fi
 jail() {  # jail <file in files/> <target>: fill in the placeholders
-  sed -e "s|@SSH_BANTIME@|$KW_F2B_SSH_BANTIME|g" -e "s|@SSH_MAXRETRY@|$KW_F2B_SSH_MAXRETRY|g" -e "s|@SSH_PORT@|$SSH_PORT|g" \
+  sed -e "s|@SSH_BANTIME@|$KW_F2B_SSH_BANTIME|g" -e "s|@MAX_BANTIME@|$MAX_BANTIME|g" -e "s|@SSH_MAXRETRY@|$KW_F2B_SSH_MAXRETRY|g" -e "s|@SSH_PORT@|$SSH_PORT|g" \
       -e "s|@TAILNET@|$TAILNET|g" -e "s|@LOGS@|$PROXY_LOGS|g" "$F/$1" | write "$JD/$2"
 }
 drop() {  # drop <target>: remove a jail file whose module is off

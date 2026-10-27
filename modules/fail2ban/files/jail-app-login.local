@@ -2,7 +2,7 @@
 # Wrong password/token on your websites (admin, login). Milder than SSH -
 # there is no legitimate SSH failure, but people do mistype passwords:
 # 5 failures in 1 h -> banned for a day on all ports. Coming back doubles the
-# ban (bantime.increment), 2 bans in 30 days trigger recidive (a year).
+# ban (bantime.increment), 2 bans in 30 days trigger recidive (KW_F2B_MAX_BANTIME).
 [app-login]
 enabled   = true
 filter    = keepwatch-app-login

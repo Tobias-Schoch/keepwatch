@@ -178,6 +178,10 @@ def attempts() -> tuple[dict[str, int], dict[str, float]]:
 def refresh(dry_run: bool):
     c = conf()
     days = max(1, int(c.get("KW_BANHISTORY_DAYS") or 60))
+    # Never longer than any other ban may last (KW_F2B_MAX_BANTIME, e.g. 90d; default 52w).
+    m = re.fullmatch(r"([1-9][0-9]*)([mhdw])", (c.get("KW_F2B_MAX_BANTIME") or "52w").strip())
+    if m:
+        days = min(days, max(1, int(m.group(1)) * {"m": 60, "h": 3600, "d": 86400, "w": 604800}[m.group(2)] // 86400))
     spare_countries = set((c.get("KW_BANHISTORY_SPARE_COUNTRIES") or "").upper().split())
     spare_below = int(c.get("KW_BANHISTORY_SPARE_BELOW") or 100)
     trusted = (c.get("KW_TRUSTED_IPS") or "").split()
