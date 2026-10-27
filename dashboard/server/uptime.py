@@ -5,7 +5,8 @@ site_check() in dashboard.py (curl via 127.0.0.1 with the real name and
 certificate), but with an expectation per site:
 
   - Default: 2xx/3xx (and 401 - a login is in front) on "/".
-  - PROBE_PATHS: containers where "/" says nothing get their own path and codes.
+  - KW_UPTIME_PROBES: containers where "/" says nothing get their own path and codes,
+    e.g. "my-app=/health" or "my-app=/health:200,204" (space separated).
   - With an IP allow-list (allow ...; deny all;): the proxy answers the server
     with 403 - that counts, but says nothing about the container (the block
     applies before proxy_pass). So the container is also asked directly on its
@@ -41,8 +42,21 @@ INTERVAL = 60
 KEEP_DAYS = 90
 RETRY_AFTER = 5
 
-# Container -> path and expected codes, where "/" says nothing (e.g. {"my-app": ("/health", (200,))}).
-PROBE_PATHS: dict[str, tuple[str, tuple[int, ...]]] = {}
+
+
+def probe_paths() -> dict[str, tuple[str, tuple[int, ...]]]:
+    """KW_UPTIME_PROBES: container -> path and expected codes, where "/" says nothing.
+
+    "my-app=/health" expects 2xx/3xx there, "my-app=/health:200,204" exactly those codes.
+    Read on every cycle, so a deploy takes effect without restarting the dashboard."""
+    out: dict[str, tuple[str, tuple[int, ...]]] = {}
+    for item in config.get("KW_UPTIME_PROBES", "").split():
+        name, _, rest = item.partition("=")
+        path, _, codes = rest.partition(":")
+        if not name or not path.startswith("/"):
+            continue
+        out[name] = (path, tuple(int(c) for c in codes.split(",") if c.isdigit() and 100 <= int(c) <= 599))
+    return out
 
 _G: dict = {}
 
@@ -101,12 +115,13 @@ def sites() -> list[dict]:
     finally:
         con.close()
     out = []
+    probes = probe_paths()
     for r in rows:
         domains = json.loads(r["domain_names"] or "[]")
         if not domains:
             continue
         entries, deny = D.parse_access(r["advanced_config"] or "")
-        path, expect = PROBE_PATHS.get(r["forward_host"], ("/", ()))
+        path, expect = probes.get(r["forward_host"], ("/", ()))
         locked = bool(entries and deny)
         out.append({
             "domain": domains[0], "hostId": r["id"], "https": bool(r["certificate_id"]),

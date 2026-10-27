@@ -446,8 +446,8 @@ from `KW_PORTAINER_WEBHOOKS="<webhook-id>@<domain> ..."` (proxy module), the wiz
 ### Availability  (`server/uptime.py`, needs module `proxy`)
 
 A thread fetches every enabled site once a minute (curl via 127.0.0.1 with the real name, like the check
-in `/api/sites`). "Answers" means: 2xx/3xx (or 401) on `/`; containers listed in `PROBE_PATHS` (empty by default)
-use their own path and codes; with an IP allow-list 403 **and** the container answers directly on its Docker IP
+in `/api/sites`). "Answers" means: 2xx/3xx (or 401) on `/`; containers listed in `KW_UPTIME_PROBES` (keepwatch.conf, e.g.
+`"my-app=/health"` or `"my-app=/health:200,204"`) use their own path and codes; with an IP allow-list 403 **and** the container answers directly on its Docker IP
 with < 500 (the block applies before `proxy_pass`). A failure is retried after 5 s; only then is it an outage.
 Storage: `/var/lib/keepwatch/dashboard/uptime.db` - `checks` 90 days, after that only daily totals (`days`, 2 years)
 and `outages`. While the proxy module is off, nothing is probed and both endpoints return 404.
