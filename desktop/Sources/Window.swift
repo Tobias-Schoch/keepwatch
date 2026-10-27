@@ -116,13 +116,10 @@ struct Bar: View {
             // Empty space drags the window
             Color.clear.contentShape(Rectangle()).gesture(WindowDragGesture())
             if lock.locked {
-                // Locked: only the status, no tabs and buttons.
+                // Locked: only the two status symbols, no buttons.
                 HStack(spacing: 8) {
                     Color.clear.frame(width: 70, height: 1)
-                    ViewThatFits(in: .horizontal) {
-                        pills(compact: false, locked: true)
-                        pills(compact: true, locked: true)
-                    }
+                    status(locked: true)
                     Spacer(minLength: 10)
                 }
                 .padding(.horizontal, 10)
@@ -147,44 +144,42 @@ struct Bar: View {
         }
     }
 
+    /// Dashboard: the status symbols left, three tools right. In Portainer, the Proxy Manager and the
+    /// other web UIs a way back comes first - their links live on the dashboard page now, not in tabs.
     private var controls: some View {
-            HStack(spacing: 8) {
-                Color.clear.frame(width: 70, height: 1)   // traffic lights
-                ViewThatFits(in: .horizontal) {
-                    pills(compact: false)
-                    pills(compact: true)
-                }
-                Spacer(minLength: 10)
-                ViewThatFits(in: .horizontal) {
-                    Segments(compact: false)
-                    Segments(compact: true)
-                }
-                .layoutPriority(1)
-                Spacer(minLength: 10)
-                BackupButton()
+        HStack(spacing: 8) {
+            Color.clear.frame(width: 70, height: 1)   // traffic lights
+            if web.selected != .dashboard {
+                BackCrumb(title: web.selected.title)
+            }
+            status(locked: false)
+            Spacer(minLength: 10)
+            if web.selected != .dashboard {
+                // The dashboard refreshes itself; the other UIs have no reload button of their own.
                 BarIcon(symbol: "arrow.clockwise", help: "Reload (⌘R)") { web.reload() }
                     .disabled(!store.isReady)
-                BarIcon(symbol: "safari", help: "Open in browser (⇧⌘O)") { web.openInBrowser() }
-                BarIcon(symbol: "terminal", help: "Open Terminal with SSH to the server (⌘T)") { Terminal.openSSH() }
-                    .disabled(Config.current == nil)
-                BarIcon(symbol: "lock", help: "Lock (⌘L)") { AppLock.shared.lock() }
             }
-            .padding(.horizontal, 10)
+            BackupButton(iconOnly: true)
+            BarIcon(symbol: "terminal", help: "Open Terminal with SSH to the server (⌘T)") { Terminal.openSSH() }
+                .disabled(Config.current == nil)
+            BarIcon(symbol: "lock", help: "Lock (⌘L)") { AppLock.shared.lock() }
+        }
+        .padding(.horizontal, 10)
     }
 }
 
 extension Bar {
-    /// "This Mac" (Tailscale, tunnel) and "Server" (reachability, health) kept apart.
-    @ViewBuilder func pills(compact: Bool, locked: Bool = false) -> some View {
-        HStack(spacing: 6) {
-            StatusPill(label: "This Mac", text: store.macText,
-                       color: O.tone(store.macLevel),
-                       help: "This Mac's Tailscale and SSH tunnel")
-            StatusPill(label: Server.host.isEmpty ? "Server" : "Server: \(Store.serverName)",
-                       text: compact && store.isReady && store.health.isEmpty ? "reachable" : store.serverText,
-                       color: store.serverLevel.map(O.tone) ?? O.neutral,
-                       help: "Server \(Server.host) - \(store.guidance)")
-                .onTapGesture { if !locked && store.isReady && !store.health.isEmpty { web.choose(.dashboard) } }
+    /// Two symbols, colored by state: this Mac's Tailscale connection (only with Tailscale) and the server.
+    /// The words are in the tooltip; a button appears only when something needs a click.
+    @ViewBuilder func status(locked: Bool) -> some View {
+        HStack(spacing: 2) {
+            if store.usesTailscale {
+                StateSymbol(symbol: "point.3.connected.trianglepath.dotted", color: O.tone(store.macLevel),
+                           help: "This Mac: \(store.macText)")
+            }
+            StateSymbol(symbol: "server.rack", color: store.serverLevel.map(O.tone) ?? O.neutral,
+                       help: "\(Server.host.isEmpty ? "Server" : Store.serverName): \(store.serverText) - \(store.guidance)",
+                       action: !locked && store.isReady && !store.health.isEmpty ? { web.choose(.dashboard) } : nil)
             if !locked, [.tailscaleOff, .needsLogin, .missing, .serverDown, .tunnelFailed].contains(store.phase) {
                 Button(store.phase == .needsLogin ? "Open Tailscale" : (store.phase == .missing ? "Get Tailscale"
                     : store.phase == .tunnelFailed ? "Try Again" : "Connect")) {
@@ -192,70 +187,59 @@ extension Bar {
                 }
                 .buttonStyle(SmallButton())
                 .fixedSize()
+                .padding(.leading, 6)
             }
         }
     }
 }
 
-struct StatusPill: View {
-    var label: String
-    var text: String
+/// A status symbol in the title bar: the color is the state, the tooltip says it in words.
+struct StateSymbol: View {
+    var symbol: String
     var color: Color
     var help: String
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label).foregroundStyle(O.dim)
-            Text(text).foregroundStyle(color)
-        }
-        .font(.system(size: 11.5, weight: .medium))
-        .lineLimit(1)
-        .padding(.horizontal, 9)
-        .frame(height: 22)
-        .background(Capsule().fill(color.opacity(0.08)))
-        .overlay(Capsule().strokeBorder(color.opacity(0.16), lineWidth: 1))
-        .fixedSize()
-        .help(help)
-    }
-}
-
-struct Segments: View {
-    var compact = false
-    @State private var web = Web.shared
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(Tab.allCases) { t in
-                SegmentButton(tab: t, selected: web.selected == t, compact: compact)
-            }
-        }
-        .fixedSize()
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.white.opacity(0.035)))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.white.opacity(0.06), lineWidth: 1))
-    }
-}
-
-struct SegmentButton: View {
-    var tab: Tab
-    var selected: Bool
-    var compact = false
+    var action: (() -> Void)? = nil
     @State private var hover = false
     var body: some View {
-        Button { Web.shared.choose(tab) } label: {
-            HStack(spacing: 6) {
-                Image(systemName: tab.symbol).font(.system(size: 11))
-                if !compact || selected { Text(tab.title).font(.system(size: 12.5, weight: .medium)) }
-            }
-            .foregroundStyle(selected ? O.text : (hover ? O.dim : O.mute))
-            .padding(.horizontal, 11)
-            .frame(height: 24)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.white.opacity(selected ? 0.09 : (hover ? 0.04 : 0))))
-            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(.white.opacity(selected ? 0.1 : 0), lineWidth: 1))
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(color)
+            .frame(width: 26, height: 26)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.white.opacity(hover && action != nil ? 0.06 : 0)))
             .contentShape(Rectangle())
+            .onHover { hover = $0 }
+            .onTapGesture { action?() }
+            .help(help)
+            .accessibilityLabel(help)
+    }
+}
+
+/// "‹ Dashboard / Portainer": the way back out of a web UI.
+struct BackCrumb: View {
+    var title: String
+    @State private var hover = false
+    var body: some View {
+        HStack(spacing: 6) {
+            Button { Web.shared.choose(.dashboard) } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").font(.system(size: 10.5, weight: .semibold))
+                    Text("Dashboard")
+                }
+                .foregroundStyle(hover ? O.text : O.dim)
+                .padding(.horizontal, 7)
+                .frame(height: 24)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.white.opacity(hover ? 0.06 : 0)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hover = $0 }
+            .help("Back to the dashboard (⌘1)")
+            Text("/").foregroundStyle(O.mute)
+            Text(title).foregroundStyle(O.text).lineLimit(1)
         }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-        .help("\(tab.title) (⌘\(tab.shortcut))")
+        .font(.system(size: 12.5, weight: .medium))
+        .fixedSize()
+        .padding(.trailing, 4)
     }
 }
 

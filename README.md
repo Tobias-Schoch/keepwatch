@@ -43,7 +43,7 @@ git clone https://github.com/Tobias-Schoch/keepwatch && cd keepwatch
   history, an A–F security grade per website, Certificate Transparency watch, Lynis and Trivy results,
   and a timeline of what happened. Dangerous actions need a passkey (Touch ID, Windows Hello, security key).
 - **Kernel and system hardening**: sysctl, auditd, no core dumps, unused protocols off, Ubuntu extras off.
-- **A macOS app** (optional) that holds the tunnel, shows every admin UI in tabs, locks with Touch ID and
+- **A macOS app** (optional) that holds the tunnel, shows every admin UI in one window, locks with Touch ID and
   pulls a copy of your backups to your Mac.
 
 ## Modules

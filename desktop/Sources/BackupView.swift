@@ -6,13 +6,15 @@ import SwiftUI
 /// "Pull Backup" in the title bar: a sand dot if not pulled today; progress while running.
 /// A click opens the panel with everything else.
 struct BackupButton: View {
+    /// Symbol only (the title bar): the text shows while a backup runs, the rest is in the tooltip.
+    var iconOnly = false
     @State private var backup = Backup.shared
     @State private var hover = false
 
     var body: some View {
         Button { backup.panelOpen.toggle() } label: {
             ViewThatFits(in: .horizontal) {
-                content(compact: false)
+                if !iconOnly { content(compact: false) }
                 content(compact: true)
             }
             .foregroundStyle(tint)

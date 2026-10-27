@@ -2,13 +2,18 @@
 
 An optional desktop client for a Keepwatch server. It is a thin native shell around the real
 dashboard, not a re-implementation: the app opens its own SSH tunnel to your server and shows
-the dashboard and your other admin UIs (Portainer, Nginx Proxy Manager, anything you add) in
-tabs. It stays locked until Touch ID confirms, and it keeps an eye on the server from the menu bar.
+the dashboard and your other admin UIs (Portainer, Nginx Proxy Manager, anything you add) in one
+window. It stays locked until Touch ID confirms, and it keeps an eye on the server from the menu bar.
 
 You do not need it. `./keepwatch tunnel` plus a browser gives you the same dashboard. The app adds:
 
-- **One window, one tab per admin UI.** The dashboard is always first (Cmd-1), then Cmd-2 ... Cmd-9.
-  Each tab has its own persistent WKWebView, so logins and page state survive.
+- **One window for every admin UI.** The dashboard links to the others (tool cards, quick search
+  Cmd-K); Cmd-1 is the dashboard, Cmd-2 ... Cmd-9 the others. Each UI keeps its own persistent
+  WKWebView, so logins and page state survive.
+- **A quiet title bar:** two colored symbols - this Mac's Tailscale connection and the server (the
+  words are in the tooltip) - and Pull Backup, Terminal, Lock. Inside Portainer and the other UIs,
+  "‹ Dashboard" leads back and a reload button appears; a button shows up only when something
+  needs a click (Connect, Open Tailscale, Try Again).
 - **Automatic SSH tunnel** with fail2ban-friendly reconnects (see below), optionally over Tailscale.
 - **Touch ID lock** on launch and after 15 minutes of inactivity.
 - **Touch ID for dangerous dashboard actions** (a Secure Enclave key, since WebAuthn does not work in a WKWebView).
@@ -168,7 +173,7 @@ default; a copy started from `build/` never touches it.
 ## Pull backup
 
 Your own copy of the server's restic backup on this Mac - **only on request**, never by itself.
-Button "Pull Backup" in the title bar (a sand-colored dot = not pulled today), in the menu bar menu
+Button "Pull Backup" in the title bar (the drive symbol; a sand-colored dot = not pulled today), in the menu bar menu
 and under Server > Pull Backup (Shift-Cmd-S). The panel shows:
 
 - **Last pulled** (time, snapshots, size) and the **folder** (default `~/Keepwatch Backups`, "Change ...").
