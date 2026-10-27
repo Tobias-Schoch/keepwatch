@@ -9,7 +9,8 @@
 # Safe to run any number of times: every module only changes what differs and
 # only restarts services whose configuration changed. Modules that were
 # enabled on the last run and are no longer in KW_MODULES are uninstalled
-# (their remove.sh); their data is kept.
+# (their remove.sh); their data is kept. Add-ons switched in the dashboard
+# (/etc/keepwatch/modules-override.json) count as if they were in KW_MODULES.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 LANG=C.UTF-8
 
@@ -68,6 +69,22 @@ _mods=" base "
 for m in $KW_MODULES; do [[ $m == base || $_mods == *" $m "* ]] || _mods+="$m "; done
 KW_MODULES=$_mods
 unset _mods
+# Add-ons switched on or off in the dashboard (keepwatch-modules, lib/kwmodules.py):
+# KW_MODULES + on - off. A deploy keeps them until keepwatch.conf takes them over - without
+# this, the next deploy would uninstall what the dashboard switched on.
+if [[ -s $KW_ETC/modules-override.json ]]; then
+  command -v python3 >/dev/null || { echo "$KW_ETC/modules-override.json needs python3 - apt-get install python3" >&2; exit 1; }
+  # shellcheck disable=SC2086 # one module per word
+  _eff=$(python3 "$KW_ROOT/lib/kwmodules.py" effective --root "$KW_ROOT" -- $KW_MODULES) || exit 1
+  while IFS= read -r _l; do
+    case $_l in
+      "modules "*) KW_MODULES=" ${_l#modules } " ;;
+      "switched "*) echo "  modules switched in the dashboard: ${_l#switched }" ;;
+      "warn "*) warn "${_l#warn }" ;;
+    esac
+  done <<<"$_eff"
+  unset _eff _l
+fi
 for m in $KW_MODULES; do
   [[ -d $KW_ROOT/modules/$m ]] || { echo "Unknown module in KW_MODULES: $m (see ./keepwatch modules)" >&2; exit 1; }
   for r in $(meta "$m" REQUIRES); do
@@ -133,7 +150,8 @@ if (( ${#CHANGED[@]} )); then printf '  changed: %s\n' "${CHANGED[@]}"; else ech
 for w in "${WARNINGS[@]}"; do printf '  \033[33mwarning:\033[0m %s\n' "$w"; done
 
 # One line per deploy for the dashboard timeline (the version from VERSION.json, written by
-# deploy or by an update from the dashboard - KW_VIA=dashboard).
+# deploy or by an update from the dashboard - KW_VIA=dashboard). A module switched in the
+# dashboard runs with KW_VIA=dashboard too (no SSH session either) and adds "switch": "+lynis".
 KW_VIA=${KW_VIA:-deploy} python3 - "$KW_ROOT/VERSION.json" "$KW_STATE/deploys.jsonl" "${CHANGED[@]}" <<'PY' || true
 import json, os, sys, time
 info, out = {}, sys.argv[2]
@@ -141,9 +159,11 @@ try:
     info = json.load(open(sys.argv[1]))
 except (OSError, ValueError):
     pass
-line = json.dumps({"t": time.time(), "commit": (info.get("commit") or "")[:7] or None, "subject": info.get("subject"),
-                   "dirty": info.get("dirty"), "changed": sys.argv[3:], "via": os.environ.get("KW_VIA")},
-                  ensure_ascii=False)
+rec = {"t": time.time(), "commit": (info.get("commit") or "")[:7] or None, "subject": info.get("subject"),
+       "dirty": info.get("dirty"), "changed": sys.argv[3:], "via": os.environ.get("KW_VIA")}
+if os.environ.get("KW_SWITCH"):
+    rec["switch"] = os.environ["KW_SWITCH"]
+line = json.dumps(rec, ensure_ascii=False)
 try:
     old = open(out).read().splitlines()[-999:]
 except OSError:

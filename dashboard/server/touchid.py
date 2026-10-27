@@ -153,6 +153,8 @@ DANGER: list[tuple[str, str, str, object, str | None]] = [
     ("POST", r"/api/updates/(apply|rollback)", "Update or roll back an image", None, "docker"),
     ("POST", r"/api/cleanup", "Clean up (prune)", None, "docker"),
     ("POST", r"/api/self-update/apply", "Install a Keepwatch update", None, None),  # runs new code as root
+    # Both directions: off can drop a safeguard (audit log, backups), on runs a root apply.
+    ("POST", r"/api/modules/[a-z0-9-]+", "Switch a module on or off", None, None),
     # Credentials
     ("PUT|DELETE", r"/api/settings/npm", "Change Proxy Manager credentials", None, "proxy"),
     ("PUT", r"/api/settings/portainer", "Change Portainer token", None, "portainer"),

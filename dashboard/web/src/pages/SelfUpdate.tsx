@@ -80,7 +80,7 @@ function WhatsNew({ s, defaultOpen = false }: { s: SelfUpdate; defaultOpen?: boo
   );
 }
 
-function Log({ lines, label = "Show details" }: { lines: string[]; label?: string }) {
+export function Log({ lines, label = "Show details" }: { lines: string[]; label?: string }) {
   const [open, setOpen] = useState(false);
   if (!lines.length) return null;
   return (
@@ -94,7 +94,7 @@ function Log({ lines, label = "Show details" }: { lines: string[]; label?: strin
 }
 
 /** Seconds since `from`, ticking. */
-function Elapsed({ from }: { from: number | null }) {
+export function Elapsed({ from }: { from: number | null }) {
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 1000);

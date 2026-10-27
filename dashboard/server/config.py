@@ -11,8 +11,10 @@ so the contract with modules/ lives in one place.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import sys
 import threading
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -31,6 +33,8 @@ MODULE_NAMES = {"base": "Base system", "debloat": "Debloat", "auto-updates": "Au
                 "fail2ban": "fail2ban", "ban-history": "Ban history", "tailscale": "Tailscale", "docker": "Docker",
                 "firewall": "Firewall", "log-archive": "Log archive", "backup": "Backup", "image-scan": "Image scan",
                 "lynis": "Lynis", "proxy": "Reverse proxy", "portainer": "Portainer", "dashboard": "Dashboard"}
+# Add-ons the dashboard may switch on and off (keepwatch-modules decides; this is the fallback when it is missing).
+TOGGLEABLE = ("lynis", "image-scan", "log-archive", "ban-history", "auditd", "auto-updates", "backup")
 
 # --- Paths (contract with modules/) -----------------------------------------------
 # KW_ETC / KW_VAR only for running the dashboard outside a server (tests); production uses the defaults.
@@ -48,6 +52,10 @@ DEPLOY_LOG = VAR / "deploys.jsonl"                 # written by lib/apply.sh
 VERSION_JSON = ROOT / "VERSION.json"               # what runs: written by deploy and keepwatch-self-update
 UPDATE_JSON = VAR / "update.json"                  # last update check + last update (keepwatch-self-update)
 UPDATE_LOG = VAR / "self-update.log"
+MODULES_OVERRIDE = ETC / "modules-override.json"   # modules switched in the dashboard (keepwatch-modules)
+MODULES_APPLY_JSON = VAR / "modules-apply.json"    # progress of keepwatch-modules-apply.service
+MODULES_CLI = Path("/usr/local/sbin/keepwatch-modules")  # list/enable/disable/status (on PATH first: tests)
+DEPLOY_LOCK = Path("/run/keepwatch.lock")          # held by lib/apply.sh, deploys and the updaters
 LOG_ARCHIVE_DIR = Path("/var/log/keepwatch/containers")
 LOG_ARCHIVE_STATUS = VAR / "log-archive" / "status.json"
 LOG_ARCHIVE_CONF = ETC / "log-archive.conf"
@@ -72,7 +80,7 @@ UNITS = {"backup": "keepwatch-backup", "backup-verify": "keepwatch-backup-verify
          "ssh-fallback": "keepwatch-ssh-fallback", "log-archive": "keepwatch-log-archive",
          "image-scan": "keepwatch-image-scan", "lynis": "keepwatch-lynis", "ban-history": "keepwatch-ban-history",
          "dashboard": "keepwatch-dashboard", "self-update": "keepwatch-self-update",
-         "self-update-check": "keepwatch-self-update-check"}
+         "self-update-check": "keepwatch-self-update-check", "modules-apply": "keepwatch-modules-apply"}
 PASSKEY_CLI = "keepwatch-passkey reset"
 
 
@@ -171,9 +179,68 @@ def get_list(key: str) -> list[str]:
     return get(key).split()
 
 
+_EFF = {"key": None, "modules": set(), "overrides": {}}
+
+
+def _kwmodules():
+    """lib/kwmodules.py of this copy (the server runs the dashboard from /opt/keepwatch), or None."""
+    try:
+        if str(ROOT / "lib") not in sys.path:
+            sys.path.append(str(ROOT / "lib"))
+        import kwmodules
+        return kwmodules
+    except Exception:  # noqa: BLE001 - an older copy without it: KW_MODULES alone
+        return None
+
+
+def _effective() -> dict:
+    """KW_MODULES with the dashboard's switches on top (MODULES_OVERRIDE, {"on": [...], "off": [...]},
+    written by keepwatch-modules), worked out like lib/apply.sh does (kwmodules.effective: only
+    toggleable add-ons, requirements respected). Cached until keepwatch.conf or the override changes."""
+    key = (_mtime(EXAMPLE), _mtime(CONF), str(CONF), _mtime(MODULES_OVERRIDE))
+    with _LOCK:
+        if _EFF["key"] == key:
+            return _EFF
+    conf = [m for m in get_list("KW_MODULES") if m in MODULES]
+    try:
+        raw = json.loads(MODULES_OVERRIDE.read_text())
+    except (OSError, ValueError):
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+    ov = {k: [m for m in raw.get(k) or [] if isinstance(m, str) and m in MODULES] if isinstance(raw.get(k), list) else []
+          for k in ("on", "off")}
+    ov["log"] = []
+    km = _kwmodules()
+    mods, plus, minus = None, [], []
+    if km:
+        try:
+            mods, plus, minus, _ = km.effective(conf, ov, km.catalog(ROOT))
+        except Exception:  # noqa: BLE001
+            mods = None
+    if mods is None:  # without kwmodules: the same rule, minus the requirement check
+        plus = [m for m in ov["on"] if m in TOGGLEABLE and m not in conf]
+        minus = [m for m in ov["off"] if m in TOGGLEABLE and m in conf and m not in plus]
+        mods = [m for m in conf if m not in minus] + plus
+    with _LOCK:
+        _EFF.update(key=key, modules=(set(mods) & set(MODULES)) | {"base", "dashboard"},
+                    overrides={**{m: True for m in plus}, **{m: False for m in minus}})
+        return _EFF
+
+
+def overrides() -> dict[str, bool]:
+    """Modules switched in the dashboard that keepwatch.conf does not have yet: {id: on?}."""
+    return _effective()["overrides"]
+
+
 def modules() -> set[str]:
-    """Enabled modules (base is always on, the dashboard is on while it runs)."""
-    return (set(get_list("KW_MODULES")) & set(MODULES)) | {"base", "dashboard"}
+    """Enabled modules: KW_MODULES with what was switched in the dashboard on top (base is always on,
+    the dashboard is on while it runs)."""
+    return _effective()["modules"]
+
+
+def module_name(mid: str) -> str:
+    """NAME from modules/<id>/module.conf, else MODULE_NAMES."""
+    return parse_file(ROOT / "modules" / mid / "module.conf").get("NAME") or MODULE_NAMES.get(mid, mid)
 
 
 def enabled(module: str) -> bool:

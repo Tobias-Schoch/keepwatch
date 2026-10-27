@@ -2,7 +2,7 @@ import { Archive, ArrowUpCircle, Blocks, Clock, Eye, EyeOff, Fingerprint, Globe,
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, refreshAll, usePoll } from "../api";
 import { Chips, Loading, PageHero, Stale } from "../common";
-import { has, MODULES, useConfig } from "../config";
+import { has, useConfig } from "../config";
 import { Reveal } from "../design/fx";
 import { Button, Callout, Confirm, CopyButton, cx, Field, IconButton, KeyValue, Panel, Pill, Toggle } from "../design/ui";
 import { ago, agoShort, minutesOf, timeZone } from "../format";
@@ -17,6 +17,8 @@ import { NpmBody, useNpmStatus } from "./NpmAccess";
 import { DBody, DFoot, SaveFoot, SettingDialog, SettingRow } from "./settingsUi";
 import { onOpenSetting, pendingSetting, settingsIndex, settingTitle, type SettingKey } from "./settingsOpen";
 import { SelfUpdateBody, selfUpdateRowState, selfUpdateRowValue } from "./SelfUpdate";
+import { ModulesBody, modulesRowState, modulesRowValue } from "./Modules";
+import { useModules } from "../modules";
 import { useSelfUpdate } from "../selfupdate";
 import { RemoteAccessBody, SshCountdown, sshAvailable, tailscaleState } from "./Tailscale";
 import { TouchIdBody, touchRowState, touchRowValue, useTouchStatus } from "./TouchId";
@@ -655,52 +657,6 @@ function UpdatesBody({ u, backupAt, reload, close }: { u: Settings["updates"]; b
   );
 }
 
-/* ---------- Modules -------------------------------------------------------------------------------- */
-
-function ModulesBody({ close }: { close: () => void }) {
-  const cfg = useConfig();
-  return (
-    <>
-      <DBody>
-        <div className="flex flex-col gap-4">
-          {cfg.fallback && (
-            <Callout tone="sand" title="The server didn't report its modules">
-              Probably an older backend – everything is shown as on. Run <span className="d-mono">./keepwatch deploy</span> to update it.
-            </Callout>
-          )}
-          <ul className="d-mod-list">
-            {MODULES.map((m) => {
-              const isOn = cfg.modules[m.id] !== false;
-              return (
-                <li key={m.id} className={cx("d-mod-row", !isOn && "is-off")}>
-                  <div className="min-w-0">
-                    <div className="d-mod-name">
-                      {m.name} <span className="d-mono d-mod-id">{m.id}</span>
-                    </div>
-                    <div className="d-mod-sum">{m.summary}</div>
-                  </div>
-                  <Pill tone={isOn ? "ok" : "neutral"} dot={isOn}>
-                    {isOn ? "on" : "off"}
-                  </Pill>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="o-hint">
-            Enable or disable modules on your computer: <code className="d-mono">./keepwatch enable &lt;module&gt;</code> then <code className="d-mono">./keepwatch deploy</code>.
-            {cfg.version && <> Keepwatch {cfg.version}.</>}
-          </p>
-        </div>
-      </DBody>
-      <DFoot>
-        <Button variant="ghost" onClick={close}>
-          Close
-        </Button>
-      </DFoot>
-    </>
-  );
-}
-
 /* ---------- Page ----------------------------------------------------------------------------------- */
 
 export function SettingsPage() {
@@ -769,6 +725,7 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
   const archive = useArchiveOverview(keys.has("logArchive"));
   const touch = useTouchStatus(keys.has("passkey"));
   const kwUpdate = useSelfUpdate();
+  const mods = useModules();
   const shut = () => setOpen(null);
 
   // Rows only for installed modules whose section the server actually sent.
@@ -788,7 +745,6 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
   const warn = b && u ? orderWarning(b.schedule, u.rebootTime) : null;
   const ao = archive.data;
   const st = npm?.st ?? null;
-  const modulesOn = MODULES.filter((m) => cfg.modules[m.id] !== false).length;
 
   const row = (key: SettingKey, icon: typeof Clock, value: ReactNode, state?: ReactNode, extra?: { hint?: string; id?: string }) =>
     show(key) ? <SettingRow key={key} icon={icon} title={settingTitle(key)} value={value} state={state} onOpen={() => setOpen(key)} hint={extra?.hint} id={extra?.id} /> : null;
@@ -931,14 +887,9 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
         {row("selfUpdate", ArrowUpCircle, selfUpdateRowValue(kwUpdate.s, kwUpdate.error), selfUpdateRowState(kwUpdate.s), {
           hint: "Install new Keepwatch versions from GitHub without a computer.",
         })}
-        {row(
-          "modules",
-          Blocks,
-          <>
-            <b>{modulesOn}</b> of {MODULES.length} on{cfg.version ? <> · Keepwatch {cfg.version}</> : null}
-          </>,
-          cfg.fallback ? <Pill tone="sand">not reported</Pill> : null,
-        )}
+        {row("modules", Blocks, modulesRowValue(mods, cfg), modulesRowState(mods, cfg.fallback), {
+          hint: "Which Keepwatch modules run on the server; switch the add-ons here.",
+        })}
       </Group>
 
       {open === "tailscale" && ts && tsState && show("tailscale") && (
@@ -1024,8 +975,8 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
         </SettingDialog>
       )}
       {open === "modules" && (
-        <SettingDialog icon={Blocks} title={settingTitle("modules")} sub="What Keepwatch installed on this server." size="md" onClose={shut}>
-          {(close) => <ModulesBody close={close} />}
+        <SettingDialog icon={Blocks} title={settingTitle("modules")} sub="What Keepwatch set up on this server – add-ons switch here, the rest from your computer." size="lg" onClose={shut}>
+          {(close) => <ModulesBody mods={mods} close={close} />}
         </SettingDialog>
       )}
     </>

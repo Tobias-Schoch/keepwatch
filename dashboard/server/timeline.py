@@ -314,9 +314,29 @@ def _journal(args: list[str], timeout: float = 600):
 
 _STACKS = {"at": 0.0, "titles": {}, "containers": {}}
 
+# Unmanaged compose projects: Keepwatch's own by image (also after a rename), else by project name; anything else
+# keeps its capitalized project name. COPY of dashboard/web/src/stackNames.ts (unmanagedName) - keep both in sync,
+# the timeline links into the Services page by this exact title. Only names: what counts as infrastructure
+# (updates.py _without_infra) keys off "managed", never off the title.
+_PROXY_IMAGE = re.compile(r"(^|/)nginx-proxy-manager(:|@|$)")
+_PORTAINER_IMAGE = re.compile(r"(^|/)portainer-(ce|ee)(:|@|$)")
+_PROJECT_NAMES = {"proxy": "Proxy Manager", "portainer": "Portainer"}
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+def _unmanaged_title(project: str, images: list[str]) -> str:
+    if images:
+        parts = [n for n, rx in (("Proxy Manager", _PROXY_IMAGE), ("Portainer", _PORTAINER_IMAGE)) if any(rx.search(i) for i in images)]
+    else:
+        parts = [_PROJECT_NAMES[project]] if project in _PROJECT_NAMES else []
+    return " & ".join(parts) if parts else _cap(project)
+
 
 def _stack_titles() -> dict[str, str]:
-    """Project -> display name, like the block on the Services page (Services.tsx titleOf)."""
+    """Project -> display name, like the block on the Services page (Services.tsx buildBlocks, stackNames.ts)."""
     if time.time() - _STACKS["at"] < 60:
         return _STACKS["titles"]
     titles, owner = {}, {}
@@ -325,17 +345,31 @@ def _stack_titles() -> dict[str, str]:
         stacks = (col.value or {}).get("stacks") or [] if col else []
     except Exception:  # noqa: BLE001
         stacks = []
+    try:
+        containers = (D().COLLECTORS["docker"].value or {}).get("containers") or []
+    except Exception:  # noqa: BLE001
+        containers = []
+    images: dict[str, str] = {c.get("name"): c.get("image") or "" for c in containers}
+    projects: dict[str, list[str]] = collections.defaultdict(list)
+    for c in containers:
+        if c.get("project"):
+            projects[c["project"]].append(c.get("image") or "")
     for s in stacks:
         name = s.get("name") or ""
         if not s.get("managed"):
-            title = "Infrastructure"
+            imgs = [images[c] for c in s.get("containers") or [] if images.get(c)] or projects.get(name, [])
+            title = _unmanaged_title(name, imgs)
         else:
             repo = re.sub(r"\.git$", "", ((s.get("git") or {}).get("url") or "")).rstrip("/").split("/")[-1]
-            title = repo if re.search(r"[A-Z]", repo) else (name.upper() if len(name) <= 4 else name)
+            title = repo if re.search(r"[A-Z]", repo) else _cap(name)
         titles[name] = title
         for c in s.get("containers") or []:
             owner[c] = name
-    if stacks:
+    # Without Portainer the Services page groups by compose project: Keepwatch's own by name, the rest capitalized.
+    for project, imgs in projects.items():
+        if project not in titles:
+            titles[project] = _unmanaged_title(project, imgs) if any(_PROXY_IMAGE.search(i) or _PORTAINER_IMAGE.search(i) for i in imgs) else _cap(project)
+    if titles and (stacks or not config.enabled("portainer")):  # stacks not collected yet: ask again next time
         _STACKS.update(at=time.time(), titles=titles, containers=owner)
     return titles
 
@@ -1022,7 +1056,9 @@ def scan_boots(full: bool = False):
 
 def scan_deploys(full: bool = False):
     """Lines lib/apply.sh writes on every deploy: {"t", "commit", "subject", "dirty", "changed": [paths],
-    "via": "deploy" | "dashboard" | "rollback"} (+ "ok": false from keepwatch-self-update after a rollback)."""
+    "via": "deploy" | "dashboard" | "rollback"} (+ "ok": false from keepwatch-self-update after a rollback).
+    A module switched in the dashboard (keepwatch-modules) adds "switch": "+lynis" / "-lynis": via dashboard
+    = it went through, via rollback = it failed and was switched back."""
     try:
         lines = config.DEPLOY_LOG.read_text(errors="replace").splitlines()
     except OSError:
@@ -1045,6 +1081,19 @@ def scan_deploys(full: bool = False):
         if r.get("dirty"):
             facets.append("the local checkout had uncommitted changes")
         via = r.get("via")
+        sw = r.get("switch") if isinstance(r.get("switch"), str) else ""
+        m = re.match(r"^([+-])([a-z0-9][a-z0-9-]{0,40})$", sw)
+        if m:  # a module switched in the dashboard, not a new Keepwatch version
+            name, verb = config.module_name(m.group(2)), "on" if m.group(1) == "+" else "off"
+            failed = via == "rollback"
+            what = f"Switching {name} {verb} failed - put back" if failed else f"Module {name} switched {verb} in the dashboard"
+            facets = (["Settings -> Modules has the log"] if failed else []) + \
+                ([("changed: " + _more(short, 6))] if short else [])
+            add("system", what, detail=" · ".join(facets) or None, level="warn" if failed else "info", t=t, source="deploy",
+                key=f"deploy:{int(t)}", link=_setting("modules"),
+                meta={"commit": commit, "changed": changed[:50], "module": m.group(2), "action": verb},
+                weight=WEIGHT["module"] if not failed else WEIGHT["deploy"])
+            continue
         if r.get("ok") is False and via == "dashboard":  # written by keepwatch-self-update after a rollback
             what, facets = "Keepwatch update failed - previous version put back", ["Settings -> Keepwatch updates has the log"]
         else:

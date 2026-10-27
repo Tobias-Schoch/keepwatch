@@ -1,0 +1,13 @@
+[Unit]
+Description=Keepwatch: set up an add-on switched on or off in the dashboard
+# Its own unit, not a child of the dashboard: lib/apply.sh may restart the dashboard on the way.
+# Started by keepwatch-modules enable|disable, never at boot.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-modules run
+# Runs lib/apply.sh like a deploy does - as root and without a sandbox (it sets up the whole server).
+# Output: /var/lib/keepwatch/modules-apply.log and the dashboard; the journal gets the same.
+TimeoutStartSec=1h

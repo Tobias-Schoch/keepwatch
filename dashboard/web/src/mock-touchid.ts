@@ -76,6 +76,7 @@ const RULES: [string, RegExp, string, ((b: Body) => boolean) | null, ModuleId | 
   ["PUT", /^\/api\/access\/\d+$/, "Change IP allowlist", null, "proxy"],
   ["PUT", /^\/api\/access\/\d+\/(paths|pfade)$/, "Change path allowlist", null, "proxy"],
   ["POST", /^\/api\/hosts$/, "Create proxy host", null, "proxy"],
+  ["POST", /^\/api\/modules\/[a-z0-9-]+$/, "Switch a module on or off", null, null],
   ["POST", /^\/api\/stacks\/\d+\/redeploy$/, "Redeploy stack", null, "portainer"],
   ["PUT", /^\/api\/stacks\/\d+\/env$/, "Change environment variables", null, "portainer"],
   ["GET", /^\/api\/stacks\/\d+\/env$/, "View environment variables", null, "portainer"],

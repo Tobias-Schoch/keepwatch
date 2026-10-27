@@ -28,6 +28,7 @@ import { mockCtProblems, mockCtWatch } from "./mock-ctwatch";
 import { mockSecretProblems, mockSecrets } from "./mock-secrets";
 import { mockLynis } from "./mock-lynis";
 import { mockSelfUpdate } from "./mock-selfupdate";
+import { mockModules } from "./mock-modules";
 
 const GB = 1024 ** 3;
 const now = () => Math.floor(Date.now() / 1000);
@@ -150,8 +151,8 @@ function loginIps(): LoginIps {
 
 const NET = "proxy-net";
 const CONTAINERS: Container[] = [
-  c("keepwatch-proxy-1", "jc21/nginx-proxy-manager:latest", 1.4, 182, ["0.0.0.0:80→80", "0.0.0.0:443→443", "127.0.0.1:9001→81"], [NET], "keepwatch", { module: "proxy" }),
-  c("keepwatch-portainer-1", "portainer/portainer-ce:latest", 0.3, 41, ["127.0.0.1:9002→9000"], [NET], "keepwatch", { dockerSock: true, module: "portainer" }),
+  c("keepwatch-proxy-1", "jc21/nginx-proxy-manager:latest", 1.4, 182, ["0.0.0.0:80→80", "0.0.0.0:443→443", "127.0.0.1:9001→81"], [NET], "proxy", { module: "proxy" }),
+  c("keepwatch-portainer-1", "portainer/portainer-ce:latest", 0.3, 41, ["127.0.0.1:9002→9000"], [NET], "portainer", { dockerSock: true, module: "portainer" }),
   c("web", "ghcr.io/example/web:latest", 0.1, 23, [], [NET], "web", { health: "healthy", user: "node" }),
   c("photos", "photos-photos", 0, 9, [], [NET], "photos", { health: "healthy" }),
   c("shop-frontend", "shop-frontend", 0.2, 96, [], [NET, "shop_default"], "shop", { health: "healthy", user: "nextjs" }),
@@ -160,6 +161,7 @@ const CONTAINERS: Container[] = [
   c("wiki", "ghcr.io/example/wiki:latest", 0, 48, [], [NET], "wiki", { health: "healthy", user: "node" }),
   c("blog-web", "blog-web", 0, 7, [], [NET, "blog_internal"], "blog", { health: "healthy", readOnly: true }),
   c("blog-app-1", "blog-app", 0.1, 31, [], ["blog_internal"], "blog", { readOnly: true, user: "app" }),
+  c("vaultwarden", "vaultwarden/server:latest", 0, 18, [], [NET], "vaultwarden", { health: "healthy" }), // started by hand: docker compose -p vaultwarden up
 ].filter((x): x is Container => x !== null);
 
 function c(name: string, image: string, cpu: number, memMb: number, ports: string[], networks: string[], project: string, extra: Partial<Container> & { module?: ModuleId } = {}): Container | null {
@@ -446,7 +448,7 @@ function docker(): Docker {
 const repo = (name: string) => ({ url: `https://github.com/example/${name}`, ref: "refs/heads/main" });
 
 function stacks(): Stacks {
-  const infra = CONTAINERS.filter((x) => x.project === "keepwatch").map((x) => x.name);
+  const unmanaged = (project: string) => ({ id: null, endpointId: null, name: project, source: "compose" as const, git: null, autoUpdate: null, containers: CONTAINERS.filter((x) => x.project === project).map((x) => x.name), envCount: null, updatedAt: null, updatedBy: null, managed: false });
   return {
     portainer: { connected: settings.portainer.connected, reason: settings.portainer.reason },
     stacks: [
@@ -455,7 +457,7 @@ function stacks(): Stacks {
       { id: 28, endpointId: 3, name: "blog", source: "git", git: repo("blog"), autoUpdate: null, containers: ["blog-web", "blog-app-1"], envCount: ENV[28].length, updatedAt: now() - 12 * 86400, updatedBy: "admin", managed: true },
       { id: 33, endpointId: 3, name: "wiki", source: "git", git: repo("wiki"), autoUpdate: "5m", containers: ["wiki"], envCount: 0, updatedAt: now() - 57 * 86400, updatedBy: "admin", managed: true },
       { id: 34, endpointId: 3, name: "photos", source: "git", git: repo("photos"), autoUpdate: null, containers: ["photos"], envCount: 0, updatedAt: now() - 20 * 86400, updatedBy: "admin", managed: true },
-      { id: null, endpointId: null, name: "keepwatch", source: "compose", git: null, autoUpdate: null, containers: infra, envCount: null, updatedAt: null, updatedBy: null, managed: false },
+      ...["portainer", "proxy", "vaultwarden"].map(unmanaged).filter((s) => s.containers.length),
     ],
   };
 }
@@ -640,6 +642,8 @@ export async function mockRequest(method: string, path: string, body: unknown): 
   if (ly !== undefined) return ly;
   const su = mockSelfUpdate(method, p, body); // Keepwatch updates: mock-selfupdate.ts
   if (su !== undefined) return su;
+  const mo = mockModules(method, p, body); // switching modules: mock-modules.ts
+  if (mo !== undefined) return mo;
   const up = mockUptime(method, url, () => sites().sites); // uptime: mock-uptime.ts
   if (up !== undefined) return up;
   const la = await mockLogArchive(method, url, body); // log archive: mock-logarchive.ts

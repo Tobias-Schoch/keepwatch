@@ -29,7 +29,11 @@ fi
 # The updater runs from /usr/local/sbin, not from the copy it replaces, and as its own unit:
 # apply.sh restarts the dashboard halfway through an update.
 put "$KW_ROOT/lib/kwupdate.py" /usr/local/sbin/keepwatch-self-update 755
-for u in keepwatch-self-update@.service keepwatch-self-update-check.service keepwatch-self-update-check.timer; do
+# Add-ons switched on and off in the dashboard (lib/kwmodules.py): the same pattern, its own
+# unit runs apply.sh so the switch survives the dashboard restarting.
+put "$KW_ROOT/lib/kwmodules.py" /usr/local/sbin/keepwatch-modules 755
+for u in keepwatch-self-update@.service keepwatch-self-update-check.service keepwatch-self-update-check.timer \
+         keepwatch-modules-apply.service; do
   put "$F/$u" "/etc/systemd/system/$u"
 done
 systemctl daemon-reload

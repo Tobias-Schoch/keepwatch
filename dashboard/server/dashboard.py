@@ -47,6 +47,7 @@ import secrets_check  # noqa: E402  secrets check (stack environment variables, 
 import lynis  # noqa: E402  hardening audit (reads keepwatch-lynis results)
 import touchid  # noqa: E402  dangerous actions need a passkey (list DANGER, signature check)
 import selfupdate  # noqa: E402  Keepwatch updates from the dashboard (keepwatch-self-update)
+import modules_api  # noqa: E402  switch add-on modules from the dashboard (keepwatch-modules)
 
 BIND = os.environ.get("DASHBOARD_BIND", "127.0.0.1")
 PORT = config.ports()["dashboard"]
@@ -70,6 +71,13 @@ class ApiError(Exception):
         self.status = status
         self.message = message
         self.extra = extra or {}  # more fields for the response (e.g. touchid on 428)
+
+
+class Reply:
+    """An endpoint's answer with another status than 200 (e.g. 202: started in the background)."""
+    def __init__(self, status: int, data):
+        self.status = status
+        self.data = data
 
 
 def module_off(module: str) -> ApiError:
@@ -2981,7 +2989,8 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, status: int, data):
         self._send(status, json.dumps(data, ensure_ascii=False).encode(), "application/json; charset=utf-8",
                    {"Cache-Control": "no-store"})
-        if status == 428:  # "needs a passkey" is only an intermediate step, not an action
+        if status == 428 or self.__dict__.pop("_audited", False):
+            # 428 "needs a passkey" is only an intermediate step; _audited: the endpoint wrote its own entry
             self.__dict__.pop("_req_body", None)
             return
         timeline.audit_request(self, status, data)  # timeline: write requests (endpoint + safe summary only)
@@ -3033,7 +3042,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._static(path)
             self._guard(method != "GET")
             res = self._route(method, path, query)
-            self._json(200, res)
+            if isinstance(res, Reply):
+                self._json(res.status, res.data)
+            else:
+                self._json(200, res)
         except ApiError as e:
             self._json(e.status, {"error": e.message, **getattr(e, "extra", {})})
         except sqlite3.Error as e:  # a database that is missing, locked or not ours yet
@@ -3065,6 +3077,8 @@ class Handler(BaseHTTPRequestHandler):
             return uptime.route(method, path, query)
         if path == "/api/self-update" or path.startswith("/api/self-update/"):  # Keepwatch updates (selfupdate.py)
             return selfupdate.route(method, path, self._body() if method in ("POST", "PUT") else {})
+        if path == "/api/modules" or path.startswith("/api/modules/"):  # switch add-ons (modules_api.py)
+            return modules_api.route(self, method, path, self._body() if method == "POST" else {})
         if path.startswith("/api/logarchive"):  # container log archive (logarchive.py)
             import logarchive
             return logarchive.route(method, path, query, self._body() if method == "PUT" else {})
@@ -3213,6 +3227,7 @@ def main():
     threading.Thread(target=ctwatch.loop, daemon=True, name="ctwatch").start()
     threading.Thread(target=secrets_check.loop, daemon=True, name="secrets-check").start()
     threading.Thread(target=lynis.loop, daemon=True, name="lynis").start()
+    threading.Thread(target=modules_api.loop, daemon=True, name="modules").start()
     srv = ThreadingHTTPServer((BIND, PORT), Handler)
     srv.daemon_threads = True
     on = " ".join(m for m in config.MODULES if config.enabled(m))

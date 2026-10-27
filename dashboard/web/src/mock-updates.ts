@@ -39,14 +39,14 @@ const images: ImageUpdate[] = [
     notesUrl: "https://www.postgresql.org/docs/release/16.16/",
   }),
   img({
-    ref: "jc21/nginx-proxy-manager:latest", name: "Proxy Manager", containers: ["keepwatch-proxy-1"], services: ["proxy"], project: "keepwatch", via: "compose",
+    ref: "jc21/nginx-proxy-manager:latest", name: "Proxy Manager", containers: ["keepwatch-proxy-1"], services: ["proxy"], project: "proxy", via: "compose",
     status: "update", kind: "patch",
     local: { digest: "sha256:4393e642e233", version: "2.16.0", created: now() - 29 * DAY },
     remote: { digest: "sha256:52b2c59994f3", version: "2.16.2", updated: now() - 3 * DAY },
     notesUrl: "https://github.com/NginxProxyManager/nginx-proxy-manager/releases",
   }),
   img({
-    ref: "portainer/portainer-ce:latest", name: "Portainer", containers: ["keepwatch-portainer-1"], services: ["portainer"], project: "keepwatch", via: "compose",
+    ref: "portainer/portainer-ce:latest", name: "Portainer", containers: ["keepwatch-portainer-1"], services: ["portainer"], project: "portainer", via: "compose",
     status: "major", kind: "major",
     local: { digest: "sha256:3609c307943b", version: "2.45.3", created: now() - 2 * DAY },
     remote: { digest: "sha256:7e0d1f2a3b4c", version: "3.0.0", updated: now() - DAY },

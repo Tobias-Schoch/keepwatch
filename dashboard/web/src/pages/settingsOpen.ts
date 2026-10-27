@@ -20,13 +20,13 @@ const ALL: { key: SettingKey; title: string; keywords: string; module?: ModuleId
   { key: "portainer", title: "Portainer", keywords: "token access api stacks", module: "portainer" },
   { key: "npm", title: "Proxy Manager login", keywords: "nginx proxy manager npm email password new site", module: "proxy" },
   { key: "selfUpdate", title: "Keepwatch updates", keywords: "keepwatch update upgrade new version github check install self-update", selfUpdate: true },
-  { key: "modules", title: "Modules", keywords: "modules enable disable installed keepwatch deploy" },
+  { key: "modules", title: "Modules", keywords: "modules enable disable switch on off add-ons installed keepwatch deploy lynis auditd backup image scan log archive ban history" },
 ];
 
 /**
  * Row ids the backend uses in problem targets ("settings/<row>") and timeline links (`link.setting`).
  */
-export type SettingRow = "remote-access" | "passkey" | "fail2ban" | "backup-schedule" | "backup-remote" | "backup-password" | "updates" | "log-archive" | "portainer" | "proxy" | "self-update";
+export type SettingRow = "remote-access" | "passkey" | "fail2ban" | "backup-schedule" | "backup-remote" | "backup-password" | "updates" | "log-archive" | "portainer" | "proxy" | "self-update" | "modules";
 
 const ROW: Record<SettingRow, SettingKey> = {
   "remote-access": "tailscale",
@@ -40,6 +40,7 @@ const ROW: Record<SettingRow, SettingKey> = {
   portainer: "portainer",
   proxy: "npm",
   "self-update": "selfUpdate",
+  modules: "modules",
 };
 
 /** The settings row for a backend row id, if that row exists with the installed modules. */

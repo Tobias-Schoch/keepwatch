@@ -95,8 +95,9 @@ function set(c: Config) {
   listeners.forEach((l) => l());
 }
 
-/** Fetches /api/config (at most `timeoutMs`). Never throws. */
-export async function loadConfig(timeoutMs = 3000): Promise<Config> {
+/** Fetches /api/config (at most `timeoutMs`). Never throws. `keep`: on failure keep what we have
+ *  (reloading after a module was switched – the dashboard may be restarting) instead of the fallback. */
+export async function loadConfig(timeoutMs = 3000, keep = false): Promise<Config> {
   if (MOCK) {
     const { mockConfig } = await import("./mock-config");
     set(mockConfig());
@@ -112,10 +113,13 @@ export async function loadConfig(timeoutMs = 3000): Promise<Config> {
     const next: Config = { ...FALLBACK, ...c, modules: { ...ALL_ON, ...(c.modules ?? {}) }, ports: { ...FALLBACK.ports, ...(c.ports ?? {}) }, fallback: false };
     set({ ...next, tools: Array.isArray(c.tools) ? c.tools : deriveTools(next) });
   } catch {
-    set(FALLBACK);
+    if (!keep) set(FALLBACK);
   }
   return config;
 }
+
+/** Load /api/config again, e.g. after a module was switched: dock, pages and `useHas` follow. */
+export const reloadConfig = () => loadConfig(5000, true);
 
 export const getConfig = () => config;
 

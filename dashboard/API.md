@@ -33,7 +33,8 @@ ssh -L 9004:127.0.0.1:9004 root@<server>
 
 ### Modules
 
-Everything except `base` is optional (`KW_MODULES` in `keepwatch.conf`, see `GET /api/config`).
+Everything except `base` is optional (`KW_MODULES` in `keepwatch.conf`, see `GET /api/config`). The add-ons can
+also be switched in the dashboard (section "Switching modules"); "on" always means `KW_MODULES` with those switches on top.
 While a module is off:
 
 - its endpoints answer **404** with `{ error: "The <name> module is not enabled (KW_MODULES in
@@ -51,7 +52,8 @@ Configuration: `/etc/keepwatch/keepwatch.conf` (env `KW_CONF` overrides), defaul
 ```ts
 {
   hostname: string;                    // KW_HOSTNAME, else the system hostname
-  modules: Record<ModuleId, boolean>;  // every known module: base debloat auto-updates ssh-hardening
+  modules: Record<ModuleId, boolean>;  // on right now: KW_MODULES + switched on - switched off in the dashboard
+                                       // (as lib/apply.sh works it out); every known module: base debloat auto-updates ssh-hardening
                                        // kernel-hardening auditd fail2ban ban-history tailscale docker firewall
                                        // log-archive backup image-scan lynis proxy portainer dashboard
   localTz: string;                     // KW_LOCAL_TZ ("Etc/UTC"): schedules and day boundaries
@@ -942,6 +944,56 @@ Without `KW_SELF_UPDATE_REPO`: `GET` answers `{ enabled: false }`, the others 40
 - `PUT /api/self-update/settings` `{ autoCheck: boolean }` → like `GET`. Switches the timer; a deploy only overrides it
   when `KW_SELF_UPDATE_CHECK` changed since the last deploy.
 
+## Switching modules  (`server/modules_api.py`, UI: Settings → Modules, `web/src/modules.ts`, `web/src/pages/Modules.tsx`)
+
+Add-ons the server works without can be switched here: `lynis`, `image-scan`, `log-archive`, `ban-history`, `auditd`,
+`auto-updates`, `backup`. Everything else changes how you reach or run the server and stays on your computer
+(`./keepwatch enable|disable <module>`, then `./keepwatch deploy`). The work is done by `keepwatch-modules`
+(`lib/kwmodules.py`, installed by the dashboard module as `/usr/local/sbin/keepwatch-modules`):
+
+- `list --json` → the module list below (without `requiredBy`/`command`).
+- `enable|disable <id> --by dashboard --json` → `{ ok, message, started }`: checks, writes
+  `/etc/keepwatch/modules-override.json` (`{ on: [...], off: [...], log: [...] }`), starts
+  `keepwatch-modules-apply.service` (runs `lib/apply.sh`; on failure the switch is undone and `apply.sh` runs again) and
+  returns at once. Exit 0 = started or nothing to do, 1 = refused, 2 = usage.
+- `status --json` / `/var/lib/keepwatch/modules-apply.json` → the running or last switch.
+- **Override**: a switch made here that `keepwatch.conf` on your computer does not have yet. The next `./keepwatch deploy`
+  asks whether to take it over. `config.modules()` (and so `/api/config` and every module gate) applies overrides as
+  soon as the file changes.
+- Timeline: `deploys.jsonl` lines of a switch carry `switch: "+lynis" | "-lynis"` (`via: "dashboard"`: done,
+  `via: "rollback"`: failed and put back). The backend adds an entry itself only for a switch `apply.sh` never logged
+  (e.g. it stopped before the end), plus "Switch … started in the dashboard" / "… refused" for the request.
+
+- `GET /api/modules` (every 30 s on the settings page, every 2 s while a switch runs; keep polling while the dashboard
+  restarts – the apply can restart it)
+  ```ts
+  { available: boolean;                       // keepwatch-modules is installed (false: list from keepwatch.conf, nothing switchable)
+    modules: { id: string; name: string; summary: string | null; requires: string[];
+               enabled: boolean;              // on right now (keepwatch.conf + override)
+               inConf: boolean;               // in KW_MODULES of the keepwatch.conf the server got with the last deploy
+               override: "on" | "off" | null; // switched here, not yet in keepwatch.conf
+               toggleable: boolean;           // may be switched here
+               why: string | null;            // why not (not toggleable), without the command
+               installed: boolean | null;     // set up on the server right now
+               blocked: string | null;        // why a switch now would be refused (a requirement is off, an enabled module needs it)
+               requiredBy: string[];          // enabled modules that need it
+               command: string | null }[];    // for your computer: "./keepwatch enable proxy && ./keepwatch deploy" (null for base)
+    run: { state: "idle" | "running" | "done" | "failed"; module: string | null; name: string | null;
+           action: "on" | "off" | null; step: string | null; startedAt: number | null; endedAt: number | null;
+           log: string[];                     // last 60 lines
+           error: string | null; rolledBack: boolean; by: string | null };
+    busy: "modules" | "self-update" | "deploy" | null;   // what a switch would collide with right now
+    overrides: number }                       // modules with an override
+  ```
+  A `running` switch without news for 60 s whose unit is gone is reported as `failed`. Right after a `POST` the switch
+  shows as `running` (`step: "starting"`) until the unit reports.
+- `POST /api/modules/<id>` `{ enabled: boolean }` → **202** `{ ok: true, ...GET }`, the switch runs in the background
+  (200 `{ ok: true, message, ...GET }` when there was nothing to do). **Passkey** ("Switch a module on or off", both
+  directions: off can drop a safeguard, on runs a root apply). 400 without a boolean `enabled` (or a usage error of the
+  CLI), 404 unknown module, 409 with the reason while a switch, a deploy or a Keepwatch update runs, when the module is not
+  toggleable (the message names the command for your computer), already in that state, `blocked`, or refused by
+  `keepwatch-modules` (its message). 503 when `keepwatch-modules` is not installed.
+
 ## GET /api/backups  (every 10 s, every 2 s during a backup; needs module backup)
 
 ```ts
@@ -1135,6 +1187,7 @@ settings (more attempts, shorter windows/bans, new "never ban" entries) · lift 
 IP allowlist / path allowlist · create proxy host · redeploy stack · change **and view** environment variables
 (`GET /api/stacks/<id>/env`, plain text) · stop container · update/roll back an image · clean up · change/remove
 credentials of Proxy Manager, Portainer, off-site backup target · show backup password · shorten backup retention ·
+switch a module on or off (both directions) · install a Keepwatch update ·
 shorten log archive · add/remove passkey devices, create a pairing code (`register/start` with a `pairCode` is not). A condition that raises counts as dangerous. Entries that belong to a
 disabled module are skipped (those endpoints answer 404 anyway), and `protects` lists only enabled ones.
 
