@@ -1,0 +1,49 @@
+# The dashboard UI for updates from the dashboard. The server never builds it (no Node.js there)
+# and git does not hold it: on every push to main this builds dashboard/web and publishes it as
+# keepwatch-ui-<fingerprint>.tar.gz in the pre-release "dashboard-ui". The fingerprint covers
+# the UI sources (lib/kwupdate.py ui-fingerprint), so one build serves every commit with the same
+# sources, and keepwatch-self-update knows which one to fetch. A fork that offers updates to its
+# own servers (KW_SELF_UPDATE_REPO) needs Actions switched on for this workflow.
+name: Dashboard UI
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: dashboard-ui, cancel-in-progress: false }
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: dashboard-ui
+    steps:
+      - uses: actions/checkout@v4
+      - name: Already published?
+        id: fp
+        run: |
+          fp=$(python3 lib/kwupdate.py ui-fingerprint .)
+          echo "fp=$fp" >> "$GITHUB_OUTPUT"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --prerelease --title "Dashboard UI builds" \
+              --notes "Prebuilt dashboard interface for updates from the dashboard (keepwatch-self-update). Not a Keepwatch release."
+          fi
+          if gh release view "$TAG" --json assets -q '.assets[].name' | grep -qx "keepwatch-ui-$fp.tar.gz"; then
+            echo "have=1" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.fp.outputs.have != '1'
+        uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: dashboard/web/package-lock.json }
+      - if: steps.fp.outputs.have != '1'
+        name: Build and publish
+        run: |
+          fp=${{ steps.fp.outputs.fp }}
+          (cd dashboard/web && npm ci --no-audit --no-fund && npm run build)
+          out=$RUNNER_TEMP/ui && mkdir -p "$out" && cp -R dashboard/web/dist "$out/dist" && echo "$fp" > "$out/ui-fingerprint"
+          tar -C "$out" --owner=0 --group=0 -czf "$RUNNER_TEMP/keepwatch-ui-$fp.tar.gz" ui-fingerprint dist
+          gh release upload "$TAG" "$RUNNER_TEMP/keepwatch-ui-$fp.tar.gz"
+      - name: Keep the newest 30 builds
+        run: |
+          gh release view "$TAG" --json assets -q '.assets | sort_by(.createdAt) | reverse | .[30:] | .[].name' |
+            while read -r name; do gh release delete-asset "$TAG" "$name" --yes; done

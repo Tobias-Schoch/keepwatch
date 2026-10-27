@@ -1,0 +1,12 @@
+[Unit]
+Description=Keepwatch update from the dashboard (installs commit %i from GitHub)
+# Its own unit, not a child of the dashboard: lib/apply.sh restarts the dashboard on the way.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-self-update apply %i
+# Runs lib/apply.sh like a deploy does - as root and without a sandbox (it sets up the whole server).
+# Output: /var/lib/keepwatch/self-update.log and the dashboard; the journal gets the same.
+TimeoutStartSec=1h

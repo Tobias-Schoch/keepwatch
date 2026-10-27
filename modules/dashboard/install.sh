@@ -25,4 +25,31 @@ if [[ $SUM != "$OLD" ]] || changed /etc/systemd/system/keepwatch-dashboard || ! 
   [[ $SUM == "$OLD" ]] || CHANGED+=("dashboard code")
   echo "$SUM" > "$KW_STATE/dashboard.sum"
 fi
+# --- Keepwatch updates from the dashboard (lib/kwupdate.py) --------------------------
+# The updater runs from /usr/local/sbin, not from the copy it replaces, and as its own unit:
+# apply.sh restarts the dashboard halfway through an update.
+put "$KW_ROOT/lib/kwupdate.py" /usr/local/sbin/keepwatch-self-update 755
+for u in keepwatch-self-update@.service keepwatch-self-update-check.service keepwatch-self-update-check.timer; do
+  put "$F/$u" "/etc/systemd/system/$u"
+done
+systemctl daemon-reload
+# Automatic check every 6 h: KW_SELF_UPDATE_CHECK is an initial value. The dashboard switches the
+# timer itself (Settings -> Keepwatch updates); a deploy only applies KW_SELF_UPDATE_CHECK again
+# when it changed since the last deploy. No repository = no checks at all.
+if [[ -z $KW_SELF_UPDATE_REPO ]]; then WANT=off; elif [[ $KW_SELF_UPDATE_CHECK == no ]]; then WANT=no; else WANT=yes; fi
+SEEN=$(cat "$KW_STATE/self-update-check" 2>/dev/null || true)
+if [[ $WANT != "$SEEN" ]]; then
+  if [[ $WANT == yes ]]; then
+    systemctl enable -q --now keepwatch-self-update-check.timer
+  else
+    systemctl disable -q --now keepwatch-self-update-check.timer 2>/dev/null || true
+  fi
+  echo "$WANT" > "$KW_STATE/self-update-check"
+  CHANGED+=("self-update check: $WANT")
+fi
+# What runs changed with this deploy - look again (in the background, one request to GitHub).
+if systemctl is-enabled -q keepwatch-self-update-check.timer 2>/dev/null; then
+  systemctl start --no-block keepwatch-self-update-check.service
+fi
+
 echo "  on 127.0.0.1:$KW_DASHBOARD_PORT - on your computer: ./keepwatch tunnel"

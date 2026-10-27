@@ -1,0 +1,31 @@
+[Unit]
+Description=Keepwatch: is there a newer version on GitHub? (result for the dashboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/keepwatch-self-update check
+TimeoutStartSec=2min
+# Asks the GitHub API, reads /opt/keepwatch/VERSION.json and keepwatch.conf, writes
+# /var/lib/keepwatch/update.json - nothing else.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/keepwatch
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=

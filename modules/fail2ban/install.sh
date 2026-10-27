@@ -13,6 +13,10 @@ OWN=$(ip -o addr show scope global | awk '$2 !~ /^(docker|br-|veth|tailscale)/ {
 # handled by the tailscale jail anyway.
 DEPLOY_IP=$(deploy_client_ip)
 case $DEPLOY_IP in 100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*|fd7a:115c:a1e0:*) DEPLOY_IP="" ;; esac
+# An update from the dashboard has no SSH session: the last deploy's address stays.
+if [[ ${KW_VIA:-} == dashboard || ${KW_VIA:-} == rollback ]]; then
+  DEPLOY_IP=$(sed -n 's/^deploy_ip = //p' "$JD/00-keepwatch-ips.local" 2>/dev/null | head -1 || true)
+fi
 # shellcheck disable=SC2086,SC2116 # joins the words
 IGNORE=$(echo $OWN $KW_TRUSTED_IPS)
 write "$JD/00-keepwatch-ips.local" <<CONF

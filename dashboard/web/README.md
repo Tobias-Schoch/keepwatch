@@ -38,6 +38,11 @@ Other mock switches: `&fresh` (fresh install: Tailscale not logged in, no Portai
 no off-site backup), `&ts` (request comes via Tailscale, so port 22 may be closed),
 `&closed` (port 22 closed two hours ago).
 
+Keepwatch updates from the dashboard (`src/mock-selfupdate.ts`): `&update=available` (offered; "Update now" runs
+through to "Keepwatch updated", with a short dashboard restart on the way), `&update=fail` (installing fails and is
+rolled back), `&update=running`, `&update=done`, `&update=failed`, `&update=local` (local build), `&update=error`
+(check hit GitHub's rate limit), `&update=off`. Without the switch the server is up to date.
+
 ## Against a real server
 
 The dashboard listens on `127.0.0.1:9004` on the server only. Open a tunnel and start the dev server:

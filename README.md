@@ -98,6 +98,7 @@ opens the tunnel for you.
 ./keepwatch deploy                 bring the server in line with keepwatch.conf
 ./keepwatch deploy --dry-run       show what would be installed or removed
 ./keepwatch deploy --fresh         new server: set up, restore from backup, set up again
+./keepwatch deploy --force         also over a newer Keepwatch the dashboard installed
 ./keepwatch modules                list modules and whether they are on
 ./keepwatch enable|disable <m>     switch modules (with dependencies)
 ./keepwatch tunnel                 dashboard and admin UIs on this computer
@@ -118,6 +119,24 @@ More than one server: one file each, e.g. `KW_CONF_FILE=shop.conf ./keepwatch de
 
 Settings you can change in the dashboard (update time, fail2ban limits, backup schedule and retention,
 SSH from the internet) are initial values: deploy writes them once and never reverts your changes.
+
+## Updating Keepwatch
+
+From your computer: `git pull`, then `./keepwatch deploy`. Or from the dashboard: when `main` on GitHub has a
+newer Keepwatch than the server runs, the overview says **Keepwatch update available** with what's new, and
+**Update now** (passkey) installs it. The server sets itself up exactly like a deploy; if that fails, it puts the
+previous version back. Afterwards `./keepwatch deploy` from an older checkout stops and asks you to `git pull`
+first (`--force` deploys it anyway).
+
+What that means for security, in short:
+
+- The server downloads the update from GitHub over HTTPS and runs it as root: the same trust as deploying it
+  yourself. Whoever can push to the configured repository controls your server - as they would on your next deploy.
+- It only ever fetches the exact commit the dashboard showed you (by its id, never "whatever main is now"), and
+  only after a passkey confirmation.
+- A fork sets `KW_SELF_UPDATE_REPO` to its own `owner/repo` (and switches on GitHub Actions: the dashboard UI is
+  built there, the server has no Node.js). `KW_SELF_UPDATE_REPO=""` turns updates from the dashboard off;
+  `KW_SELF_UPDATE_CHECK="no"` only stops the automatic check every 6 h (one anonymous request to GitHub).
 
 ## Things we learned the hard way
 

@@ -59,7 +59,8 @@ Configuration: `/etc/keepwatch/keepwatch.conf` (env `KW_CONF` overrides), defaul
   extraUis: { name: string; port: number }[];   // KW_EXTRA_UIS="Name=port Other_name=port" (_ → space)
   passkey: boolean;                    // KW_DASHBOARD_PASSKEY
   version: string;                     // VERSION file in the repository root, else the deployed commit from
-                                       // .deploy-info ("abc1234", "+dirty" for uncommitted changes), else "dev"
+                                       // VERSION.json ("abc1234", "+dirty" for uncommitted changes), else "dev"
+  selfUpdate: boolean;                 // updates from the dashboard are on (KW_SELF_UPDATE_REPO is set)
 }
 ```
 
@@ -868,6 +869,57 @@ repository type before the first `:` of `repo`), never tokens, passwords, creden
 
 Other modules add events with `timeline.add(kind, title, detail=..., level=..., service=..., key=..., link=...)`
 (docstring in `timeline.py`); `key` makes an entry unique.
+
+## Keepwatch updates  (`server/selfupdate.py`, UI: overview banner + Settings → Keepwatch updates, `web/src/selfupdate.ts`)
+
+The work is done by `keepwatch-self-update` (`lib/kwupdate.py`, installed by the dashboard module), the backend only
+reads its result and starts it:
+
+- **What runs**: `/opt/keepwatch/VERSION.json` `{ commit (40 hex), dirty, date, subject, repo ("owner/repo" of a
+  github.com origin), ui (fingerprint of the UI sources the build fits, or null), source: "deploy" | "dashboard", at }`,
+  written by `./keepwatch deploy` and by an update.
+- **Check**: `keepwatch-self-update-check.service` (timer every 6 h, randomized, while `KW_SELF_UPDATE_CHECK` is on; and
+  "Check now"). Unauthenticated GitHub API: `GET /repos/<repo>/commits/<branch>` with `If-None-Match`, then
+  `GET /repos/<repo>/compare/<installed>...<latest>` once per pair. Writes `/var/lib/keepwatch/update.json`. Offline and
+  GitHub's rate limit (403/429) only set `error` (and `retryAt`), the last result stays.
+- **Apply**: `keepwatch-self-update@<sha>.service`, its own unit because `lib/apply.sh` restarts the dashboard. Only the
+  commit of the last check, only if nothing was deployed since. Downloads `codeload.github.com/<repo>/tar.gz/<sha>` (top
+  directory `<name>-<sha>/` and git's recorded commit id are checked), reuses the installed UI build when the UI sources did
+  not change, otherwise fetches the build CI published for them (release `dashboard-ui`, asset
+  `keepwatch-ui-<fingerprint>.tar.gz`, `.github/workflows/dashboard-ui.yml`) - missing: stops before changing anything.
+  Keeps `/etc/keepwatch/keepwatch.conf`, swaps `/opt/keepwatch` ↔ the new copy (previous: `/opt/keepwatch.prev`), runs
+  `lib/apply.sh`. If that fails: the previous copy goes back (the failed one to `/opt/keepwatch.failed`) and `apply.sh`
+  runs again. One deploy or update at a time: `flock /run/keepwatch.lock` (apply.sh, deploy's copy, the updater).
+- Timeline: `deploys.jsonl` lines carry `via: "deploy" | "dashboard" | "rollback"`; a rolled-back update adds `ok: false`.
+
+Without `KW_SELF_UPDATE_REPO`: `GET` answers `{ enabled: false }`, the others 404.
+
+- `GET /api/self-update` (every 60 s, every 2 s while an update runs; keep polling while the dashboard restarts)
+  ```ts
+  { enabled: true; repo: "owner/repo"; branch: string; url: "https://github.com/owner/repo";
+    autoCheck: boolean;                      // keepwatch-self-update-check.timer enabled
+    installed: { commit: string | null; date: number | null; subject: string | null; dirty: boolean;
+                 source: "deploy" | "dashboard" | null; at: number | null; repo: string | null };   // VERSION.json
+    latest: { commit: string; date: number | null; subject: string | null } | null;   // newest on the branch
+    current: boolean;                        // the last check was made for what runs now (else: checking again)
+    available: boolean;                      // the branch has something this server does not run
+    localBuild: boolean;                     // dirty, or a commit that is not on the branch (updating replaces it)
+    otherRepo: boolean;                      // deployed from another GitHub repository than KW_SELF_UPDATE_REPO
+    changes: string[]; moreChanges: number;  // commit subjects for "What's new" (newest first, max 20)
+    checkedAt: number | null; error: string | null; errorAt: number | null; retryAt: number | null;
+    run: { state: "idle" | "running" | "done" | "failed";
+           step: "starting" | "prepare" | "download" | "install" | "apply" | "rollback" | null;
+           module: string | null;            // section of apply.sh in progress
+           target: string | null; startedAt: number | null; finishedAt: number | null;
+           message: string | null; rolledBack: boolean; log: string[] } }   // last 40 lines
+  ```
+  A `running` update without a sign of life for 90 s whose unit is gone is reported as `failed`.
+- `POST /api/self-update/check` `{}` → like `GET` (a check in the last 30 s is not repeated); 503 when the unit is missing.
+- `POST /api/self-update/apply` `{ sha }` → `{ ok: true, ...GET }`, the update runs in the background. **Passkey**
+  ("Install a Keepwatch update"). `sha` must be `latest.commit` with `available` (409 otherwise: "Check again"), 409 while
+  one runs.
+- `PUT /api/self-update/settings` `{ autoCheck: boolean }` → like `GET`. Switches the timer; a deploy only overrides it
+  when `KW_SELF_UPDATE_CHECK` changed since the last deploy.
 
 ## GET /api/backups  (every 10 s, every 2 s during a backup; needs module backup)
 

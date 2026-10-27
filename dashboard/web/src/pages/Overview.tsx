@@ -10,6 +10,7 @@ import { useHas } from "../config";
 import { followProblem, useNav, viewOfProblem } from "../nav";
 import type { Area, Overview as O, Problem } from "../types";
 import { useUpdates } from "../updates";
+import { SelfUpdateBanner } from "./SelfUpdate";
 import { TimelineRecentSection } from "./Timeline";
 import { UpdatesChip } from "./Updates";
 
@@ -253,6 +254,7 @@ export function OverviewPage() {
                   <Health list={o.health} onMachine={showMachine} />
                 </section>
               )}
+              <SelfUpdateBanner />
               <Kpis o={o} onMachine={showMachine} />
               <TimelineRecentSection />
               <Charts o={o} />

@@ -152,6 +152,7 @@ DANGER: list[tuple[str, str, str, object, str | None]] = [
     ("POST", r"/api/containers/[^/]+/stop", "Stop container", None, "docker"),
     ("POST", r"/api/updates/(apply|rollback)", "Update or roll back an image", None, "docker"),
     ("POST", r"/api/cleanup", "Clean up (prune)", None, "docker"),
+    ("POST", r"/api/self-update/apply", "Install a Keepwatch update", None, None),  # runs new code as root
     # Credentials
     ("PUT|DELETE", r"/api/settings/npm", "Change Proxy Manager credentials", None, "proxy"),
     ("PUT", r"/api/settings/portainer", "Change Portainer token", None, "portainer"),

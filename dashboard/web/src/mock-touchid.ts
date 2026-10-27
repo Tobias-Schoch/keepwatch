@@ -82,6 +82,7 @@ const RULES: [string, RegExp, string, ((b: Body) => boolean) | null, ModuleId | 
   ["POST", /^\/api\/containers\/[^/]+\/stop$/, "Stop container", null, "docker"],
   ["POST", /^\/api\/updates\/(apply|rollback)$/, "Update or roll back an image", null, "docker"],
   ["POST", /^\/api\/cleanup$/, "Clean up (prune)", null, "docker"],
+  ["POST", /^\/api\/self-update\/apply$/, "Install a Keepwatch update", null, null],
   ["PUT|DELETE", /^\/api\/settings\/npm$/, "Change Proxy Manager credentials", null, "proxy"],
   ["PUT", /^\/api\/settings\/portainer$/, "Change Portainer token", null, "portainer"],
   ["PUT|DELETE", /^\/api\/settings\/remote$/, "Change off-site backup target", null, "backup"],

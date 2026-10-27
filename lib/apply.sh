@@ -25,6 +25,17 @@ while (( $# )); do
 done
 [[ $EUID -eq 0 ]] || { echo "Run as root." >&2; exit 1; }
 
+# One run at a time: ./keepwatch deploy from a computer, an update from the dashboard
+# (keepwatch-self-update holds this lock itself around swapping /opt/keepwatch and runs
+# us with KW_LOCKED=1), or this script by hand. A dry run changes nothing and needs no lock.
+if (( ! DRY )) && [[ ${KW_LOCKED:-} != 1 ]]; then
+  exec 9>>/run/keepwatch.lock
+  if ! flock -n 9; then
+    echo "  waiting for another Keepwatch run to finish (a deploy, or an update from the dashboard) ..."
+    flock -w 1800 9 || { echo "Still busy after 30 minutes - try again later." >&2; exit 1; }
+  fi
+fi
+
 source "$KW_ROOT/lib/common.sh"
 
 # Defaults from the example, then the real configuration on top: a setting
@@ -121,16 +132,18 @@ step "Done"
 if (( ${#CHANGED[@]} )); then printf '  changed: %s\n' "${CHANGED[@]}"; else echo "  nothing changed - the server matches the configuration"; fi
 for w in "${WARNINGS[@]}"; do printf '  \033[33mwarning:\033[0m %s\n' "$w"; done
 
-# One line per deploy for the dashboard timeline (commit from .deploy-info, written by deploy).
-python3 - "$KW_ROOT/.deploy-info" "$KW_STATE/deploys.jsonl" "${CHANGED[@]}" <<'PY' || true
+# One line per deploy for the dashboard timeline (the version from VERSION.json, written by
+# deploy or by an update from the dashboard - KW_VIA=dashboard).
+KW_VIA=${KW_VIA:-deploy} python3 - "$KW_ROOT/VERSION.json" "$KW_STATE/deploys.jsonl" "${CHANGED[@]}" <<'PY' || true
 import json, os, sys, time
 info, out = {}, sys.argv[2]
 try:
     info = json.load(open(sys.argv[1]))
 except (OSError, ValueError):
     pass
-line = json.dumps({"t": time.time(), "commit": info.get("commit"), "subject": info.get("subject"),
-                   "dirty": info.get("dirty"), "changed": sys.argv[3:]}, ensure_ascii=False)
+line = json.dumps({"t": time.time(), "commit": (info.get("commit") or "")[:7] or None, "subject": info.get("subject"),
+                   "dirty": info.get("dirty"), "changed": sys.argv[3:], "via": os.environ.get("KW_VIA")},
+                  ensure_ascii=False)
 try:
     old = open(out).read().splitlines()[-999:]
 except OSError:

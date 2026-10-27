@@ -45,6 +45,8 @@ export interface Config {
   /** Dangerous actions need a passkey (Touch ID, Windows Hello, security key). */
   passkey: boolean;
   version: string;
+  /** Updates from the dashboard are on (KW_SELF_UPDATE_REPO is set). */
+  selfUpdate: boolean;
   /** Set by the client when /api/config could not be loaded (everything assumed on). */
   fallback?: boolean;
 }
@@ -59,6 +61,7 @@ const FALLBACK: Config = {
   extraUis: [],
   passkey: true,
   version: "",
+  selfUpdate: false,
   fallback: true,
 };
 

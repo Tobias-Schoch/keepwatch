@@ -6,6 +6,7 @@ import { MODULES, type Config, type ModuleId } from "./config";
  *   ?mock&modules=-proxy,-portainer      everything except these
  *   ?mock&modules=docker,backup          only these (plus base and dashboard)
  *   ?mock&modules=-passkey               no passkey confirmation
+ *   ?mock&update=off                     no updates from the dashboard (more in mock-selfupdate.ts)
  *
  * or the same list in VITE_MOCK_MODULES. Dependencies follow: without docker
  * there is no proxy, portainer, image-scan or log-archive.
@@ -35,5 +36,6 @@ export function mockConfig(): Config {
     extraUis: [{ name: "Grafana", port: 9010 }],
     passkey: !off.has("passkey"),
     version: "0.1.0-mock",
+    selfUpdate: new URLSearchParams(location.search).get("update") !== "off",
   };
 }

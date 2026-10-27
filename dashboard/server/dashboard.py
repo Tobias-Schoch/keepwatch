@@ -46,6 +46,7 @@ import ctwatch  # noqa: E402  certificate watch (CT logs, every 6 h)
 import secrets_check  # noqa: E402  secrets check (stack environment variables, hashes only)
 import lynis  # noqa: E402  hardening audit (reads keepwatch-lynis results)
 import touchid  # noqa: E402  dangerous actions need a passkey (list DANGER, signature check)
+import selfupdate  # noqa: E402  Keepwatch updates from the dashboard (keepwatch-self-update)
 
 BIND = os.environ.get("DASHBOARD_BIND", "127.0.0.1")
 PORT = config.ports()["dashboard"]
@@ -3047,6 +3048,8 @@ class Handler(BaseHTTPRequestHandler):
             return hosts.route(method, path, query, self._body() if method in ("POST", "PUT") else {})
         if path.startswith("/api/uptime"):  # availability (uptime.py)
             return uptime.route(method, path, query)
+        if path == "/api/self-update" or path.startswith("/api/self-update/"):  # Keepwatch updates (selfupdate.py)
+            return selfupdate.route(method, path, self._body() if method in ("POST", "PUT") else {})
         if path.startswith("/api/logarchive"):  # container log archive (logarchive.py)
             import logarchive
             return logarchive.route(method, path, query, self._body() if method == "PUT" else {})

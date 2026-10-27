@@ -27,6 +27,7 @@ import { mockTimeline, NOT_TIMELINE } from "./mock-timeline";
 import { mockCtProblems, mockCtWatch } from "./mock-ctwatch";
 import { mockSecretProblems, mockSecrets } from "./mock-secrets";
 import { mockLynis } from "./mock-lynis";
+import { mockSelfUpdate } from "./mock-selfupdate";
 
 const GB = 1024 ** 3;
 const now = () => Math.floor(Date.now() / 1000);
@@ -637,6 +638,8 @@ export async function mockRequest(method: string, path: string, body: unknown): 
   if (sc !== undefined) return sc;
   const ly = mockLynis(method, p); // hardening audit: mock-lynis.ts
   if (ly !== undefined) return ly;
+  const su = mockSelfUpdate(method, p, body); // Keepwatch updates: mock-selfupdate.ts
+  if (su !== undefined) return su;
   const up = mockUptime(method, url, () => sites().sites); // uptime: mock-uptime.ts
   if (up !== undefined) return up;
   const la = await mockLogArchive(method, url, body); // log archive: mock-logarchive.ts

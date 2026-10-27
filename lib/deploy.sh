@@ -3,11 +3,12 @@
 # connection is shared and $TMP is a scratch directory that goes at exit).
 # Copies the repository to /opt/keepwatch on the server and runs lib/apply.sh there.
 
-MODE=apply APPLY_ARGS=() DRY=0
+MODE=apply APPLY_ARGS=() DRY=0 FORCE=0 UI_STALE=""
 while (( $# )); do
   case $1 in
     --fresh) MODE=fresh ;;
     --dry-run) APPLY_ARGS+=(--dry-run); DRY=1 ;;
+    --force) FORCE=1 ;;
     --only)
       # Ends up in a command line on the server: module ids only.
       [[ ${2:-} =~ ^[a-z0-9,-]+$ ]] || { echo "--only needs module ids, e.g. --only firewall,fail2ban" >&2; exit 2; }
@@ -38,6 +39,7 @@ if on dashboard; then
       echo "  ok"
     elif [[ -f $WEB/dist/index.html ]]; then
       echo "  note: dashboard sources changed but npm is missing - deploying the existing build"
+      UI_STALE=--ui-stale  # VERSION.json: this build does not match the sources
     else
       echo "The dashboard UI has to be built once on this computer: install Node.js 18+ (only here, the server" >&2
       echo "never needs it) and deploy again - or go without the dashboard: ./keepwatch disable dashboard" >&2
@@ -74,23 +76,51 @@ fi
 remote "command -v rsync >/dev/null || { $SUDO apt-get -o DPkg::Lock::Timeout=600 update -q && $SUDO apt-get -o DPkg::Lock::Timeout=600 install -y -q rsync; } >/dev/null" \
   || { echo "Could not install rsync on the server." >&2; exit 1; }
 
+# One deploy or update at a time (lib/apply.sh and keepwatch-self-update take the same lock).
+# The copy below runs under it too: an update from the dashboard swaps /opt/keepwatch.
+LOCK=/run/keepwatch.lock RSYNC_PATH=rsync
+if remote "command -v flock >/dev/null"; then
+  if ! remote "$SUDO flock -n $LOCK true"; then
+    echo "Keepwatch is being set up on $HOST right now (an update from the dashboard, or a deploy from" >&2
+    echo "another computer). Try again in a few minutes." >&2
+    exit 1
+  fi
+  RSYNC_PATH="flock -w 300 $LOCK rsync"
+fi
+
+# --- Is the server newer than this copy? -----------------------------------------------
+# An update from the dashboard installs the newest version from GitHub. Deploying an older
+# checkout over it would quietly undo that update.
+srv_version=$(remote "cat /opt/keepwatch/VERSION.json 2>/dev/null" 2>/dev/null || true)
+srv=$(python3 -c 'import json, sys
+try:
+    v = json.loads(sys.stdin.read() or "{}")
+except ValueError:
+    v = {}
+print(v.get("commit") or "", v.get("source") or "")' <<<"$srv_version" 2>/dev/null || true)
+srv_commit=${srv%% *} srv_source=${srv#* }
+if (( ! FORCE )) && [[ $srv_source == dashboard && $srv_commit =~ ^[0-9a-f]{40}$ ]] && git rev-parse --git-dir >/dev/null 2>&1; then
+  if ! git cat-file -e "$srv_commit^{commit}" 2>/dev/null; then
+    # Not here yet: fetch (only the remote-tracking branches change, never your files).
+    GIT_TERMINAL_PROMPT=0 git fetch --quiet origin >/dev/null 2>&1 || true
+  fi
+  if ! git cat-file -e "$srv_commit^{commit}" 2>/dev/null || ! git merge-base --is-ancestor "$srv_commit" HEAD; then
+    msg="The server runs a newer Keepwatch (updated from the dashboard). Run \`git pull\` here first, or \`./keepwatch deploy --force\` to deploy this older copy."
+    if (( DRY )); then echo "  note: $msg"; else echo "$msg" >&2; exit 1; fi
+  fi
+fi
+
 # --- Copy ---------------------------------------------------------------------------------
 # A dry run goes to a scratch copy: the dashboard runs from /opt/keepwatch and
 # reads its keepwatch.conf, so the live copy must not change.
 DEST=/opt/keepwatch
 (( DRY )) && DEST=/var/tmp/keepwatch-dry-run
 step "Copy Keepwatch to $TARGET:$DEST"
-# For the dashboard timeline: which version was deployed.
-INFO=$TMP/deploy-info
-if git rev-parse --git-dir >/dev/null 2>&1; then
-  python3 -c 'import json, sys; print(json.dumps({"commit": sys.argv[1], "subject": sys.argv[2], "dirty": sys.argv[3] == "1"}))' \
-    "$(git rev-parse --short HEAD 2>/dev/null || echo none)" "$(git log -1 --format=%s 2>/dev/null || true)" \
-    "$([[ -n $(git status --porcelain 2>/dev/null) ]] && echo 1 || echo 0)" > "$INFO"
-else
-  echo '{}' > "$INFO"
-fi
-RSYNC_PATH=rsync
-[[ -n $SUDO ]] && RSYNC_PATH="sudo -n rsync"
+# Which version runs (VERSION.json): the dashboard timeline, updates from the dashboard, and
+# the check above on the next deploy.
+INFO=$TMP/VERSION.json
+python3 "$LIB/kwupdate.py" version-info "$ROOT" $UI_STALE > "$INFO"
+[[ -n $SUDO ]] && RSYNC_PATH="sudo -n $RSYNC_PATH"
 RSH="ssh ${SSH_OPTS[*]}" RHOST=$TARGET
 # rsync reads "host:path" up to the first colon, and macOS' openrsync cannot take [IPv6]:
 # an IPv6 address goes to ssh as HostName instead.
@@ -102,10 +132,10 @@ RSYNC=(rsync -rlptz --rsync-path="$RSYNC_PATH" -e "$RSH")
 "${RSYNC[@]}" --delete \
   --exclude .git --exclude .DS_Store --exclude node_modules --exclude '__pycache__' \
   --exclude 'dashboard/web/src' --exclude desktop --exclude docs --exclude '*.tmp' \
-  --exclude '/*.conf' --exclude .deploy-info \
+  --exclude '/*.conf' --exclude /VERSION.json \
   ./ "$RHOST:$DEST/"
 "${RSYNC[@]}" "$CONF_FILE" "$RHOST:$DEST/keepwatch.conf"
-"${RSYNC[@]}" "$INFO" "$RHOST:$DEST/.deploy-info"
+"${RSYNC[@]}" "$INFO" "$RHOST:$DEST/VERSION.json"
 # Copies from before -rlptz still carry the old owner.
 remote "$SUDO chown -R root:root $DEST && $SUDO chmod -R go-w $DEST"
 echo "  ok"

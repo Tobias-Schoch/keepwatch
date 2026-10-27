@@ -1,0 +1,11 @@
+[Unit]
+Description=Keepwatch: look for a newer version on GitHub every 6 hours
+
+[Timer]
+# Spread out, so servers do not all ask GitHub at the same minute.
+OnCalendar=*-*-* 00/6:00:00
+RandomizedDelaySec=3h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

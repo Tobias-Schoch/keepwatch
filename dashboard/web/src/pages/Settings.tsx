@@ -1,4 +1,4 @@
-import { Archive, Blocks, Clock, Eye, EyeOff, Fingerprint, Globe, KeyRound, Layers, LogOut, PackageCheck, Plus, RefreshCw, ShieldBan, ShieldCheck, Trash2, UploadCloud, UserRound, X } from "lucide-react";
+import { Archive, ArrowUpCircle, Blocks, Clock, Eye, EyeOff, Fingerprint, Globe, KeyRound, Layers, LogOut, PackageCheck, Plus, RefreshCw, ShieldBan, ShieldCheck, Trash2, UploadCloud, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, refreshAll, usePoll } from "../api";
 import { Chips, Loading, PageHero, Stale } from "../common";
@@ -16,6 +16,8 @@ import { NPM_CARD_ID } from "./NewSite";
 import { NpmBody, useNpmStatus } from "./NpmAccess";
 import { DBody, DFoot, SaveFoot, SettingDialog, SettingRow } from "./settingsUi";
 import { onOpenSetting, pendingSetting, settingsIndex, settingTitle, type SettingKey } from "./settingsOpen";
+import { SelfUpdateBody, selfUpdateRowState, selfUpdateRowValue } from "./SelfUpdate";
+import { useSelfUpdate } from "../selfupdate";
 import { RemoteAccessBody, SshCountdown, sshAvailable, tailscaleState } from "./Tailscale";
 import { TouchIdBody, touchRowState, touchRowValue, useTouchStatus } from "./TouchId";
 
@@ -764,6 +766,7 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
   const keys = new Set(settingsIndex().map((x) => x.key));
   const archive = useArchiveOverview(keys.has("logArchive"));
   const touch = useTouchStatus(keys.has("passkey"));
+  const kwUpdate = useSelfUpdate();
   const shut = () => setOpen(null);
 
   // Rows only for installed modules whose section the server actually sent.
@@ -923,6 +926,9 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
         </Group>
       )}
       <Group title="System" delay={160}>
+        {row("selfUpdate", ArrowUpCircle, selfUpdateRowValue(kwUpdate.s, kwUpdate.error), selfUpdateRowState(kwUpdate.s), {
+          hint: "Install new Keepwatch versions from GitHub without a computer.",
+        })}
         {row(
           "modules",
           Blocks,
@@ -1008,6 +1014,11 @@ function SettingsList({ s, reload, npm }: { s: Settings; reload: () => void; npm
       {open === "npm" && npm && show("npm") && (
         <SettingDialog icon={Globe} title={settingTitle("npm")} sub={'For "New site" under Services.'} onClose={shut}>
           {(close) => <NpmBody st={st} error={npm.error} load={npm.load} close={close} />}
+        </SettingDialog>
+      )}
+      {open === "selfUpdate" && show("selfUpdate") && (
+        <SettingDialog icon={ArrowUpCircle} title={settingTitle("selfUpdate")} sub="New Keepwatch versions from GitHub, installed by the server itself." size="md" onClose={shut}>
+          {(close) => <SelfUpdateBody close={close} />}
         </SettingDialog>
       )}
       {open === "modules" && (

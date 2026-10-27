@@ -45,6 +45,9 @@ IMAGE_SCAN_PROGRESS = VAR / "image-scan.progress.json"
 BAN_HISTORY_JSON = VAR / "ban-history.json"        # written by keepwatch-ban-history
 BAN_HISTORY_BIN = Path("/usr/local/sbin/keepwatch-ban-history")
 DEPLOY_LOG = VAR / "deploys.jsonl"                 # written by lib/apply.sh
+VERSION_JSON = ROOT / "VERSION.json"               # what runs: written by deploy and keepwatch-self-update
+UPDATE_JSON = VAR / "update.json"                  # last update check + last update (keepwatch-self-update)
+UPDATE_LOG = VAR / "self-update.log"
 LOG_ARCHIVE_DIR = Path("/var/log/keepwatch/containers")
 LOG_ARCHIVE_STATUS = VAR / "log-archive" / "status.json"
 LOG_ARCHIVE_CONF = ETC / "log-archive.conf"
@@ -68,13 +71,15 @@ JAILS_WEB = ("web-scanner", "app-login")
 UNITS = {"backup": "keepwatch-backup", "backup-verify": "keepwatch-backup-verify", "firewall": "keepwatch-firewall",
          "ssh-fallback": "keepwatch-ssh-fallback", "log-archive": "keepwatch-log-archive",
          "image-scan": "keepwatch-image-scan", "lynis": "keepwatch-lynis", "ban-history": "keepwatch-ban-history",
-         "dashboard": "keepwatch-dashboard"}
+         "dashboard": "keepwatch-dashboard", "self-update": "keepwatch-self-update",
+         "self-update-check": "keepwatch-self-update-check"}
 PASSKEY_CLI = "keepwatch-passkey reset"
 
 
 def version() -> str:
-    """VERSION file in the repository root, else the deployed commit (.deploy-info), else "dev"."""
-    for p in (ROOT / "VERSION", ROOT / ".deploy-info"):
+    """VERSION file in the repository root, else the deployed commit (VERSION.json, older
+    deploys: .deploy-info), else "dev"."""
+    for p in (ROOT / "VERSION", VERSION_JSON, ROOT / ".deploy-info"):
         try:
             text = p.read_text().strip()
         except OSError:
@@ -83,7 +88,7 @@ def version() -> str:
             return text
         m = re.search(r'"commit"\s*:\s*"([0-9a-f]{7,40})"', text)
         if m:
-            return m.group(1) + ("+dirty" if re.search(r'"dirty"\s*:\s*true', text) else "")
+            return m.group(1)[:7] + ("+dirty" if re.search(r'"dirty"\s*:\s*true', text) else "")
     return "dev"
 
 
@@ -233,7 +238,13 @@ def passkey() -> bool:
     return get_bool("KW_DASHBOARD_PASSKEY", True)
 
 
+def self_update_repo() -> str:
+    """KW_SELF_UPDATE_REPO (GitHub owner/repo the dashboard offers updates from); "" = off."""
+    return get("KW_SELF_UPDATE_REPO").strip()
+
+
 def public() -> dict:
     """GET /api/config."""
     return {"hostname": hostname(), "modules": {m: enabled(m) for m in MODULES}, "localTz": local_tz_name(),
-            "ports": ports(), "extraUis": extra_uis(), "passkey": passkey(), "version": version()}
+            "ports": ports(), "extraUis": extra_uis(), "passkey": passkey(), "version": version(),
+            "selfUpdate": bool(self_update_repo())}

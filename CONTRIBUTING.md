@@ -9,6 +9,7 @@ and reversible.
 keepwatch                 CLI (runs on your computer)
 keepwatch.conf.example    every setting, with defaults - the contract between all parts
 lib/                      wizard, deploy, tunnel, check (your computer) · apply.sh + common.sh (server)
+                          kwupdate.py: versions and updates from the dashboard (computer, CI and server)
 modules/<id>/             one module: module.conf, install.sh, remove.sh, files/
 dashboard/server/         dashboard backend (Python, standard library only)
 dashboard/web/            dashboard UI (Vite + React + TypeScript)
@@ -42,6 +43,9 @@ python3 -m py_compile lib/*.py dashboard/server/*.py
 cd dashboard/web && npm ci && npm run build
 ```
 
+Modules run from an update in the dashboard too (`KW_VIA=dashboard`): no terminal and no SSH session, so
+`ask` returns nothing and `deploy_client_ip` is empty - keep what the last deploy set in that case.
+
 Test on a throwaway VPS (or a local VM with Ubuntu 24.04) before opening a pull request that changes
 `modules/`, and mention what you tested. `./keepwatch deploy --dry-run` shows the plan without changes.
 
@@ -51,6 +55,6 @@ English everywhere. Comments explain *why* (the trap, the incident, the trade-of
 line does. Keep dependencies at zero on the server: bash, coreutils, Python standard library.
 
 What runs on your computer (`keepwatch`, `lib/deploy.sh`, `check.sh`, `tunnel.sh`, `backup-pull.sh`,
-`wizard.py`, `kwconf.py`) must work with macOS' bash 3.2 and BSD tools, and Python 3.8: no `declare -A`,
+`wizard.py`, `kwconf.py`, `kwupdate.py`) must work with macOS' bash 3.2 and BSD tools, and Python 3.8: no `declare -A`,
 `mapfile`, `${var,,}`; `"${arr[@]}"` of an empty array fails under `set -u` (use `${arr[@]+"${arr[@]}"}`).
 Test with `/bin/bash` on a Mac if you can.

@@ -15,6 +15,7 @@ Usage: ./keepwatch <command>
   setup                      answer a few questions, writes keepwatch.conf
   deploy [--dry-run] [--only a,b]
                              bring the server in line with keepwatch.conf
+  deploy --force             also when the server runs a newer Keepwatch (updated from the dashboard)
   deploy --fresh             new server: set up, restore from backup, set up again
   modules                    list modules and whether they are on
   enable <module>...         switch modules on (with what they need), then deploy

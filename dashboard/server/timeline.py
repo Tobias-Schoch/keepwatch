@@ -1021,7 +1021,8 @@ def scan_boots(full: bool = False):
 
 
 def scan_deploys(full: bool = False):
-    """Lines lib/apply.sh writes on every deploy: {"t", "commit", "subject", "dirty", "changed": [paths]}."""
+    """Lines lib/apply.sh writes on every deploy: {"t", "commit", "subject", "dirty", "changed": [paths],
+    "via": "deploy" | "dashboard" | "rollback"} (+ "ok": false from keepwatch-self-update after a rollback)."""
     try:
         lines = config.DEPLOY_LOG.read_text(errors="replace").splitlines()
     except OSError:
@@ -1043,7 +1044,13 @@ def scan_deploys(full: bool = False):
         facets.append(("changed: " + _more(short, 6)) if short else "nothing changed - the server already matched the configuration")
         if r.get("dirty"):
             facets.append("the local checkout had uncommitted changes")
-        add("system", f"Keepwatch deployed{f' · {commit}' if commit else ''}", detail=" · ".join(facets),
+        via = r.get("via")
+        if r.get("ok") is False and via == "dashboard":  # written by keepwatch-self-update after a rollback
+            what, facets = "Keepwatch update failed - previous version put back", ["Settings -> Keepwatch updates has the log"]
+        else:
+            what = {"dashboard": "Keepwatch updated from the dashboard",
+                    "rollback": "Keepwatch: previous version set up again"}.get(via, "Keepwatch deployed")
+        add("system", f"{what}{f' · {commit}' if commit else ''}", detail=" · ".join(facets),
             level="warn" if r.get("ok") is False else "info", t=t, source="deploy", key=f"deploy:{int(t)}",
             meta={"commit": commit, "changed": changed[:50]}, weight=WEIGHT["deploy"] if changed else 15)
 
@@ -1356,6 +1363,9 @@ def _summary(method: str, path: str, body: dict, res) -> tuple[str, str | None, 
         ("POST", "/api/updates/check"): ("Checked for updates", LINK_SERVICES),
         ("POST", "/api/updates/scan"): ("Image security scan started", LINK_SERVICES),
         ("POST", "/api/lynis/run"): ("Hardening audit started", {"view": "security"}),
+        ("POST", "/api/self-update/check"): ("Checked for a Keepwatch update", _setting("self-update")),
+        ("POST", "/api/self-update/apply"): ("Keepwatch update started", _setting("self-update")),
+        ("PUT", "/api/self-update/settings"): ("Automatic Keepwatch update check changed", _setting("self-update")),
         ("POST", "/api/touchid/register/start"): ("Passkey: device setup started", _setting("passkey")),
         ("POST", "/api/touchid/register/finish"): ("Passkey: device added", _setting("passkey")),
         ("POST", "/api/touchid/pair"): ("Passkey: pairing code created", _setting("passkey")),
