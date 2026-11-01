@@ -1,6 +1,6 @@
 /* Settings → Passkey */
 
-html[data-design^="obsidian"] .d-tid-list { display: flex; flex-direction: column; margin: 0; padding: 4px; list-style: none; border-radius: 14px; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .d-tid-list { display: flex; flex-direction: column; margin: 0; padding: 4px; list-style: none; border-radius: 14px; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .d-tid-row { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; padding: 10px 8px 10px 12px; }
 html[data-design^="obsidian"] .d-tid-row + .d-tid-row::before { content: ""; position: absolute; left: 12px; right: 12px; top: 0; height: 1px; background: var(--o-line); }
 html[data-design^="obsidian"] .d-tid-icon { width: 17px; height: 17px; color: var(--o-mute); }

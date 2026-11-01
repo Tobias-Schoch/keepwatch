@@ -1,4 +1,4 @@
-import { AppWindow, Boxes, DatabaseBackup, Globe, HardDrive, LayoutGrid, RefreshCw, Rocket, ScrollText, Ship, SlidersHorizontal, TerminalSquare, Unlock, Waypoints } from "lucide-react";
+import { AppWindow, Boxes, Palette, DatabaseBackup, Globe, HardDrive, LayoutGrid, Moon, RefreshCw, Rocket, ScrollText, Ship, SlidersHorizontal, Sun, TerminalSquare, Unlock, Waypoints } from "lucide-react";
 import { shortDateTime } from "../format";
 import { getConfig, has } from "../config";
 import { dockViews } from "../nav";
@@ -12,6 +12,7 @@ import { registerPalette, stackContainers, type PaletteCtx, type PaletteItem } f
 import { BackupConfirm, UnbanConfirm } from "./dialogs";
 import { openSetting, settingsIndex } from "../pages/settingsOpen";
 import { openTool, portainerStackPath, toolHref } from "../tools";
+import { currentDesign, currentMode, DESIGNS, setDesign, setMode } from "../design/theme";
 
 /* Built-in palette sources. Template for more: registerPalette((d) => [...]). Every source checks its modules. */
 
@@ -253,3 +254,34 @@ registerPalette(() => [
     run: (ctx: PaletteCtx) => ctx.go(v.id),
   })),
 ]);
+
+/* Designs: switch right from the palette (stored in this browser, design/theme.ts). */
+
+registerPalette(() =>
+  DESIGNS.filter((d) => d.id !== currentDesign()).map((d) => ({
+    id: `design:${d.id}`,
+    group: "settings" as const,
+    title: `Design: ${d.name}`,
+    hint: d.blurb,
+    keywords: `design theme appearance look skin ${d.light ? "light bright" : "dark"} ${d.id}`,
+    icon: Palette,
+    run: () => setDesign(d.id),
+  })),
+);
+
+/* Light / dark – Graphite only. */
+registerPalette(() => {
+  if (currentDesign() !== "graphit") return [];
+  const light = currentMode() === "light";
+  return [
+    {
+      id: "design:mode",
+      group: "settings" as const,
+      title: light ? "Dark mode" : "Light mode",
+      hint: light ? "Black glass and the dot field" : "Glass on paper, ink waves",
+      keywords: "mode theme appearance light dark bright night day toggle",
+      icon: light ? Moon : Sun,
+      run: () => setMode(light ? "dark" : "light"),
+    },
+  ];
+});

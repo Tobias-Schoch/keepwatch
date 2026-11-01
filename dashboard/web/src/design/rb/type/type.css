@@ -33,7 +33,7 @@ html[data-design^="obsidian"] .o-fold .o-fold-piece::after {
   inset: -0.04em -0.02em 0.08em;
   pointer-events: none;
   border-radius: 0.08em;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.2) 45%, rgb(var(--o-acc-hi) / 0.22));
+  background: linear-gradient(180deg, rgb(var(--o-shade, 0 0 0) / 0.62), rgb(var(--o-shade, 0 0 0) / 0.2) 45%, rgb(var(--o-acc-hi) / 0.22));
   mix-blend-mode: multiply;
   opacity: 0;
   animation: obsidian-fold-crease var(--dur, 720ms) cubic-bezier(0.215, 0.61, 0.355, 1) var(--d, 0ms) backwards;

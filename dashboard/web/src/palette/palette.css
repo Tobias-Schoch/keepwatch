@@ -11,7 +11,7 @@ html[data-design^="obsidian"] .d-pal-foot-hint { margin-left: auto; text-align: 
   html[data-design^="obsidian"] .d-palette .o-palette-hint { display: none; }
 }
 
-html[data-design^="obsidian"] .d-pal-ip { margin: 4px 4px 8px; padding: 14px 16px; border-radius: 14px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design^="obsidian"] .d-pal-ip { margin: 4px 4px 8px; padding: 14px 16px; border-radius: 14px; background: rgb(var(--o-ink, 255 255 255) / 0.035); box-shadow: inset 0 0 0 1px var(--o-line-2); }
 html[data-design^="obsidian"] .d-pal-ip-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 15px; color: var(--o-text); }
 html[data-design^="obsidian"] .d-pal-tag { height: 22px; display: inline-flex; align-items: center; padding: 0 9px; border-radius: 99px; font-size: 12px; color: var(--o-dim); box-shadow: inset 0 0 0 1px var(--o-line-2); }
 html[data-design^="obsidian"] .d-pal-tag[data-tone="rose"] { color: rgb(240 170 180); box-shadow: inset 0 0 0 1px rgba(234, 140, 152, 0.5); }

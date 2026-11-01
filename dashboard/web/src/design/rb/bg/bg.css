@@ -23,3 +23,8 @@ html[data-design^="obsidian"] .o-rb-app .o-rb-veil {
 }
 /* Small canvas around the cursor (see DotField.tsx): only it is redrawn on movement. */
 html[data-design^="obsidian"] .dot-field-near { pointer-events: none; will-change: transform; }
+
+/* Faulty Terminal (Phosphor) and Waves (Paper): one canvas over the whole backdrop. */
+html[data-design^="obsidian"] .faulty-terminal, html[data-design^="obsidian"] .waves { position: absolute; inset: 0; overflow: hidden; }
+html[data-design^="obsidian"] .faulty-terminal-canvas, html[data-design^="obsidian"] .waves-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+html[data-design^="obsidian"] .faulty-terminal-canvas { image-rendering: pixelated; }

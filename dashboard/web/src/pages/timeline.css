@@ -31,7 +31,7 @@ html[data-design^="obsidian"] .d-tl-row {
   background: transparent; transition: background 0.18s;
 }
 html[data-design^="obsidian"] .d-tl-row.is-link { cursor: pointer; }
-html[data-design^="obsidian"] .d-tl-row.is-link:hover { background: rgba(255, 255, 255, 0.035); }
+html[data-design^="obsidian"] .d-tl-row.is-link:hover { background: rgb(var(--o-ink, 255 255 255) / 0.035); }
 html[data-design^="obsidian"] .d-tl-row.is-link:focus-visible { outline: none; box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.55); }
 html[data-design^="obsidian"] .d-tl-time { justify-self: end; font-size: 12.5px; color: var(--o-mute); white-space: nowrap; }
 html[data-design^="obsidian"] .d-tl-dot {

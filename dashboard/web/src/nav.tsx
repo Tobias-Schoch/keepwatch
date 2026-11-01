@@ -2,7 +2,7 @@ import { Boxes, DatabaseBackup, LayoutGrid, ShieldCheck, SlidersHorizontal, type
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { has, useConfig, type ModuleId } from "./config";
 import { openSetting, settingOfRow } from "./pages/settingsOpen";
-import type { Area, Overview } from "./types";
+import type { Area, Overview, Problem } from "./types";
 
 export type View = "overview" | "services" | "backups" | "security" | "settings" | "timeline";
 
@@ -54,6 +54,12 @@ const ALL_DOCK: ViewDef[] = [
 
 /** Dock entries for the installed modules. */
 export const dockViews = (): ViewDef[] => ALL_DOCK.filter((v) => viewEnabled(v.id));
+
+/** Open problems in a dock entry's areas, and the color of its marker (rose if any is critical). */
+export function viewProblems(v: ViewDef, health: Problem[]): { probs: Problem[]; alert?: "rose" | "sand" } {
+  const probs = v.areas ? health.filter((h) => v.areas!.includes(h.area)) : [];
+  return { probs, alert: probs.some((p) => p.level === "crit") ? "rose" : probs.length ? "sand" : undefined };
+}
 
 /** Label of any page (dock entry or sub-page). */
 export const viewLabel = (v: View): string => ALL_DOCK.find((d) => d.id === v)?.label ?? SUBVIEWS[v]?.label ?? v;

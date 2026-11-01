@@ -28,7 +28,7 @@ html[data-design^="obsidian"] .d-kpis .o-tile-in { min-height: 150px; }
 
 /* ---- Tile extras ------------------------------------------------------------------- */
 html[data-design^="obsidian"] .d-unit { margin-left: 4px; font-size: 18px; font-weight: 500; letter-spacing: -0.01em; color: var(--o-mute); }
-html[data-design^="obsidian"] .d-bar { position: relative; display: block; height: 4px; margin-top: 14px; border-radius: 99px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+html[data-design^="obsidian"] .d-bar { position: relative; display: block; height: 4px; margin-top: 14px; border-radius: 99px; background: rgb(var(--o-ink, 255 255 255) / 0.07); overflow: hidden; }
 html[data-design^="obsidian"] .d-bar > i:not([data-tone]) { --t: 207 207 207; }
 html[data-design^="obsidian"] .d-bar > i {
   position: absolute; inset: 0 auto 0 0; border-radius: inherit;
@@ -42,20 +42,20 @@ html[data-design^="obsidian"] .d-spark { display: block; width: 100%; height: 34
 /* ---- Charts ---------------------------------------------------------------------------- */
 html[data-design^="obsidian"] .d-chart { position: relative; width: 100%; user-select: none; touch-action: pan-y; }
 html[data-design^="obsidian"] .d-chart svg { display: block; width: 100%; overflow: visible; }
-html[data-design^="obsidian"] .d-grid-line { stroke: rgba(255, 255, 255, 0.055); stroke-width: 1; shape-rendering: crispEdges; }
-html[data-design^="obsidian"] .d-base-line { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1; shape-rendering: crispEdges; }
+html[data-design^="obsidian"] .d-grid-line { stroke: rgb(var(--o-ink, 255 255 255) / 0.055); stroke-width: 1; shape-rendering: crispEdges; }
+html[data-design^="obsidian"] .d-base-line { stroke: rgb(var(--o-ink, 255 255 255) / 0.12); stroke-width: 1; shape-rendering: crispEdges; }
 html[data-design^="obsidian"] .d-axis { font: 500 10.5px/1 var(--o-sans); fill: var(--o-mute); font-variant-numeric: tabular-nums; }
 html[data-design^="obsidian"] .d-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-html[data-design^="obsidian"] .d-cross { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; stroke-dasharray: 2 3; }
+html[data-design^="obsidian"] .d-cross { stroke: rgb(var(--o-ink, 255 255 255) / 0.28); stroke-width: 1; stroke-dasharray: 2 3; }
 html[data-design^="obsidian"] .d-dot { stroke: rgb(var(--o-glass)); stroke-width: 2; }
 /* The end point pulses only briefly after appearing (constant pulsing kept the compositor awake while idle). */
 html[data-design^="obsidian"] .d-end { animation: obsidian-pulse 2.4s ease-in-out 2; }
 html[data-design^="obsidian"] .d-tip {
   position: absolute; top: 0; z-index: 5; min-width: 132px; padding: 9px 11px; border-radius: 11px; pointer-events: none;
   font-size: 12px; color: var(--o-text);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)), rgba(18, 18, 22, 0.9);
+  background: linear-gradient(180deg, rgb(var(--o-ink, 255 255 255) / 0.08), rgb(var(--o-ink, 255 255 255) / 0.025)), rgb(var(--o-surf, 18 18 22) / 0.9);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 12px 30px -10px rgba(0, 0, 0, 0.9);
+  box-shadow: inset 0 0 0 1px rgb(var(--o-ink, 255 255 255) / 0.1), 0 12px 30px -10px rgb(var(--o-shade, 0 0 0) / 0.9);
   transform: translateX(-50%);
   white-space: nowrap;
 }
@@ -114,9 +114,9 @@ html[data-design^="obsidian"] .d-card-go { flex-shrink: 0; color: var(--o-faint)
 html[data-design^="obsidian"] .d-card:hover .d-card-go { color: var(--o-text); transform: translate(2px, -2px); }
 html[data-design^="obsidian"] .d-card.is-down {
   background:
-    radial-gradient(420px circle at var(--gx, -999px) var(--gy, -999px), rgba(255, 255, 255, calc(0.055 * var(--gi, 0))), transparent 60%),
+    radial-gradient(420px circle at var(--gx, -999px) var(--gy, -999px), rgb(var(--o-ink, 255 255 255) / calc(0.055 * var(--gi, 0))), transparent 60%),
     radial-gradient(70% 50% at 100% 0%, rgba(234, 140, 152, 0.08), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
+    linear-gradient(180deg, rgb(var(--o-ink, 255 255 255) / 0.045), rgb(var(--o-ink, 255 255 255) / 0.01)),
     rgb(var(--o-glass) / var(--o-glass-a));
 }
 html[data-design^="obsidian"] .d-card .o-code-actions { opacity: 1; }
@@ -130,11 +130,11 @@ html[data-design^="obsidian"] .d-log {
   height: min(52vh, 520px); overflow: auto; overscroll-behavior: contain;
   padding: 12px 0; border-radius: 14px;
   font: 12px/1.6 var(--o-mono); color: var(--o-dim);
-  background: rgba(0, 0, 0, 0.42); box-shadow: inset 0 0 0 1px var(--o-line-2), inset 0 1px 3px rgba(0, 0, 0, 0.6);
+  background: rgb(var(--o-shade, 0 0 0) / 0.42); box-shadow: inset 0 0 0 1px var(--o-line-2), inset 0 1px 3px rgb(var(--o-shade, 0 0 0) / 0.6);
 }
 html[data-design^="obsidian"] .d-log.is-short { height: min(34vh, 320px); }
 html[data-design^="obsidian"] .d-log-line { display: flex; gap: 12px; padding: 0 14px; white-space: pre-wrap; word-break: break-word; }
-html[data-design^="obsidian"] .d-log-line:hover { background: rgba(255, 255, 255, 0.03); }
+html[data-design^="obsidian"] .d-log-line:hover { background: rgb(var(--o-ink, 255 255 255) / 0.03); }
 html[data-design^="obsidian"] .d-log-line time { flex-shrink: 0; color: var(--o-faint); }
 html[data-design^="obsidian"] .d-log-line.is-err { color: #f0b3bb; background: rgba(234, 140, 152, 0.05); box-shadow: inset 2px 0 0 rgba(234, 140, 152, 0.55); }
 html[data-design^="obsidian"] .d-log-line mark { background: rgb(var(--o-acc) / 0.28); color: var(--o-text); border-radius: 3px; }
@@ -145,7 +145,7 @@ html[data-design^="obsidian"] .d-env { display: grid; gap: 6px; }
 html[data-design^="obsidian"] .d-env-row { display: grid; grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.4fr) auto; align-items: center; gap: 8px; }
 html[data-design^="obsidian"] .d-env-row .o-input { height: 36px; font-family: var(--o-mono); font-size: 12.5px; }
 html[data-design^="obsidian"] .d-env-row.is-new .o-input { box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.35); }
-html[data-design^="obsidian"] .d-env-val { display: flex; align-items: center; gap: 2px; min-width: 0; height: 36px; padding: 0 4px 0 12px; border-radius: 11px; background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .d-env-val { display: flex; align-items: center; gap: 2px; min-width: 0; height: 36px; padding: 0 4px 0 12px; border-radius: 11px; background: rgb(var(--o-ink, 255 255 255) / 0.025); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .d-env-val span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12.5px/1 var(--o-mono); color: var(--o-text); }
 html[data-design^="obsidian"] .d-env-val span.is-masked { color: var(--o-faint); letter-spacing: 0.12em; }
 html[data-design^="obsidian"] .d-env-key { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12.5px/1 var(--o-mono); color: var(--o-dim); }
@@ -157,7 +157,7 @@ html[data-design^="obsidian"] .d-env-key { min-width: 0; overflow: hidden; text-
 /* ---- Backup: big button --------------------------------------------------------------------- */
 html[data-design^="obsidian"] .d-backup-hero { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
 html[data-design^="obsidian"] .d-run-ring { position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 99px; flex-shrink: 0; }
-html[data-design^="obsidian"] .d-run-ring::before { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid rgba(255, 255, 255, 0.08); border-top-color: var(--o-hi); animation: obsidian-spin 1.1s linear infinite; }
+html[data-design^="obsidian"] .d-run-ring::before { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid rgb(var(--o-ink, 255 255 255) / 0.08); border-top-color: var(--o-hi); animation: obsidian-spin 1.1s linear infinite; }
 
 /* ---- Header: state dot without host text on narrow screens ------------------------------- */
 html[data-design^="obsidian"] .o-server[data-ok="unknown"] i { background: var(--o-faint); box-shadow: none; }
@@ -182,8 +182,8 @@ html[data-design^="obsidian"] .d-note-input {
   transition: box-shadow 0.2s, background 0.2s;
 }
 html[data-design^="obsidian"] .d-note-input::placeholder { color: var(--o-faint); }
-html[data-design^="obsidian"] .d-note-input:hover { background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--o-line); }
-html[data-design^="obsidian"] .d-note-input:focus { background: rgba(0, 0, 0, 0.25); box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.6), 0 0 0 3px rgb(var(--o-acc) / 0.1); }
+html[data-design^="obsidian"] .d-note-input:hover { background: rgb(var(--o-ink, 255 255 255) / 0.03); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .d-note-input:focus { background: rgb(var(--o-shade, 0 0 0) / 0.25); box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.6), 0 0 0 3px rgb(var(--o-acc) / 0.1); }
 
 /* ---- Settings ----------------------------------------------------------------------------------- */
 html[data-design^="obsidian"] .d-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
@@ -198,11 +198,11 @@ html[data-design^="obsidian"] .d-chips { display: flex; flex-wrap: wrap; gap: 6p
 html[data-design^="obsidian"] .d-chip-x {
   display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 4px 0 10px; border-radius: 99px;
   font: 500 12px/1 var(--o-mono); color: var(--o-text);
-  background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px var(--o-line-2);
+  background: rgb(var(--o-ink, 255 255 255) / 0.05); box-shadow: inset 0 0 0 1px var(--o-line-2);
 }
 html[data-design^="obsidian"] .d-chip-x button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 99px; color: var(--o-mute); transition: color 0.2s, background 0.2s; }
-html[data-design^="obsidian"] .d-chip-x button:hover { color: var(--o-text); background: rgba(255, 255, 255, 0.1); }
-html[data-design^="obsidian"] .d-secret { display: flex; align-items: center; gap: 2px; min-width: 0; height: 40px; padding: 0 4px 0 13px; border-radius: 11px; background: rgba(0, 0, 0, 0.25); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design^="obsidian"] .d-chip-x button:hover { color: var(--o-text); background: rgb(var(--o-ink, 255 255 255) / 0.1); }
+html[data-design^="obsidian"] .d-secret { display: flex; align-items: center; gap: 2px; min-width: 0; height: 40px; padding: 0 4px 0 13px; border-radius: 11px; background: rgb(var(--o-shade, 0 0 0) / 0.25); box-shadow: inset 0 0 0 1px var(--o-line-2); }
 html[data-design^="obsidian"] .d-secret span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 13px/1 var(--o-mono); color: var(--o-text); }
 html[data-design^="obsidian"] .d-secret span.is-masked { color: var(--o-faint); letter-spacing: 0.14em; }
 @media (max-width: 960px) {
@@ -221,7 +221,7 @@ html[data-design^="obsidian"] .o-overlay.is-top .o-dialog { max-height: calc(100
 /* Off-site backup setup: steps, copyable command line, text links */
 .d-steps { margin: 0; padding-left: 1.25rem; display: grid; gap: 10px; font-size: 13px; color: var(--o-mute); line-height: 1.55; }
 .d-steps li::marker { color: var(--o-faint); font-family: var(--o-mono); }
-.d-copyline { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--o-line); border-radius: 10px; background: rgba(0, 0, 0, 0.25); min-width: 0; }
+.d-copyline { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--o-line); border-radius: 10px; background: rgb(var(--o-shade, 0 0 0) / 0.25); min-width: 0; }
 .d-copyline code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 11.5px; color: var(--o-text); }
 .d-link { color: var(--o-acc); text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .d-link:hover { color: var(--o-text); }
@@ -259,13 +259,13 @@ html[data-design^="obsidian"] .d-fold-meta { font-weight: 400; color: var(--o-mu
 
 /* ---- Country of an IP: code + short name ---------------------------------------------------------- */
 html[data-design^="obsidian"] .d-country { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12.5px; color: var(--o-dim); white-space: nowrap; }
-html[data-design^="obsidian"] .d-country b { font: 600 10.5px/1 var(--o-mono); letter-spacing: 0.04em; color: var(--o-mute); padding: 3px 5px; border-radius: 5px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .d-country b { font: 600 10.5px/1 var(--o-mono); letter-spacing: 0.04em; color: var(--o-mute); padding: 3px 5px; border-radius: 5px; background: rgb(var(--o-ink, 255 255 255) / 0.05); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .d-country.is-mute { color: var(--o-mute); }
 html[data-design^="obsidian"] .d-country.is-faint { color: var(--o-faint); }
 
 /* ---- Tables: clickable rows, groups, highlight ------------------------------------------------------ */
 html[data-design^="obsidian"] .d-table tr.d-row-click { cursor: pointer; }
-html[data-design^="obsidian"] .d-table tr.d-row-click:hover td, html[data-design^="obsidian"] .d-table tr.d-row-click:focus-visible td { background: rgba(255, 255, 255, 0.03); color: var(--o-text); }
+html[data-design^="obsidian"] .d-table tr.d-row-click:hover td, html[data-design^="obsidian"] .d-table tr.d-row-click:focus-visible td { background: rgb(var(--o-ink, 255 255 255) / 0.03); color: var(--o-text); }
 html[data-design^="obsidian"] .d-table tr.d-row-click:focus-visible { outline: none; }
 html[data-design^="obsidian"] .d-table tr.d-row-click td:first-child { padding-left: 8px; }
 html[data-design^="obsidian"] .d-table tr.is-bad td:first-child, html[data-design^="obsidian"] .d-table tr.is-foreign td:first-child { box-shadow: inset 2px 0 0 rgb(234 140 152 / 0.7); }
@@ -305,9 +305,9 @@ html[data-design^="obsidian"] .d-update {
   position: fixed; right: 20px; bottom: 96px; z-index: 110;
   display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 16px;
   font-size: 13px; color: var(--o-text);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.025)), rgba(18, 18, 23, 0.86);
+  background: linear-gradient(180deg, rgb(var(--o-ink, 255 255 255) / 0.085), rgb(var(--o-ink, 255 255 255) / 0.025)), rgb(var(--o-surf, 18 18 23) / 0.86);
   -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 16px 40px -14px rgba(0, 0, 0, 0.9);
+  box-shadow: inset 0 0 0 1px rgb(var(--o-ink, 255 255 255) / 0.1), 0 16px 40px -14px rgb(var(--o-shade, 0 0 0) / 0.9);
   animation: obsidian-fade 0.4s ease both;
 }
 @media (max-width: 760px) {
@@ -341,7 +341,7 @@ html[data-design^="obsidian"] .d-block-table td:last-child { overflow: visible; 
 html[data-design^="obsidian"] .d-upd-list { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 12px; }
 html[data-design^="obsidian"] .d-upd {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 14px; border-radius: 14px;
-  background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line);
+  background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line);
 }
 html[data-design^="obsidian"] .d-upd.is-quiet { padding: 6px 14px; background: none; box-shadow: none; }
 html[data-design^="obsidian"] .d-upd.is-update { background: rgb(216 193 142 / 0.05); box-shadow: inset 0 0 0 1px rgb(216 193 142 / 0.32); }
@@ -358,9 +358,9 @@ html[data-design^="obsidian"] .d-upd-link { font-size: 12.5px; color: var(--o-di
 html[data-design^="obsidian"] .d-upd-link:hover { color: var(--o-text); }
 html[data-design^="obsidian"] .d-upd-note { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--o-mute); }
 html[data-design^="obsidian"] .d-upd-hint { margin: 0 2px; font-size: 12px; color: var(--o-mute); }
-html[data-design^="obsidian"] .d-clean-bar { display: flex; height: 6px; margin-top: 4px; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+html[data-design^="obsidian"] .d-clean-bar { display: flex; height: 6px; margin-top: 4px; border-radius: 99px; overflow: hidden; background: rgb(var(--o-ink, 255 255 255) / 0.06); }
 html[data-design^="obsidian"] .d-clean-bar i { display: block; height: 100%; opacity: 0.85; }
-html[data-design^="obsidian"] .d-clean-bar i + i { box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.6); }
+html[data-design^="obsidian"] .d-clean-bar i + i { box-shadow: inset 1px 0 0 rgb(var(--o-shade, 0 0 0) / 0.6); }
 html[data-design^="obsidian"] .d-clean-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--o-line); font-size: 13.5px; cursor: pointer; }
 html[data-design^="obsidian"] .d-clean-row:first-child { border-top: 0; }
 html[data-design^="obsidian"] .d-clean-row.is-off { cursor: default; color: var(--o-mute); }

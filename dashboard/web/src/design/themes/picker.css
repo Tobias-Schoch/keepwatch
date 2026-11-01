@@ -1,0 +1,53 @@
+/* Design picker (Settings): three cards, each preview drawn in the colors of its own design. */
+html[data-design^="obsidian"] .d-designs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 10px; }
+html[data-design^="obsidian"] .d-design {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 14px; text-align: left;
+  border-radius: calc(var(--o-radius) - 4px); color: var(--o-dim);
+  box-shadow: inset 0 0 0 1px var(--o-line);
+  transition: box-shadow 0.2s, background 0.2s, color 0.2s;
+}
+html[data-design^="obsidian"] .d-design:hover { color: var(--o-text); background: rgb(var(--o-ink, 255 255 255) / 0.03); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design^="obsidian"] .d-design.is-on { color: var(--o-text); box-shadow: inset 0 0 0 2px var(--o-accent); }
+html[data-design^="obsidian"] .d-design-name { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 0 4px; font-size: 14px; font-weight: 600; color: var(--o-text); }
+html[data-design^="obsidian"] .d-design-name svg { color: var(--o-accent); }
+html[data-design^="obsidian"] .d-design-blurb { padding: 0 4px; font-size: 12.5px; line-height: 1.45; color: var(--o-mute); }
+
+html[data-design^="obsidian"] .d-design-pv { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 8px; }
+html[data-design^="obsidian"] .d-design-pv i { position: absolute; display: block; }
+
+/* Graphite: dot field, a headline in light, the dock */
+html[data-design^="obsidian"] .d-design-pv[data-pv="graphit"] {
+  background: radial-gradient(circle, rgb(255 255 255 / 0.22) 0.8px, transparent 1.2px) 0 0 / 8px 8px, #050505;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+html[data-design^="obsidian"] .d-design-pv[data-pv="graphit"] i:nth-child(1) { left: 12%; top: 12%; width: 18%; height: 4%; border-radius: 2px; background: rgb(255 255 255 / 0.5); }
+html[data-design^="obsidian"] .d-design-pv[data-pv="graphit"] i:nth-child(2) { left: 12%; top: 30%; width: 52%; height: 13%; border-radius: 3px; background: linear-gradient(90deg, #fff, #8a8a8a); }
+html[data-design^="obsidian"] .d-design-pv[data-pv="graphit"] i:nth-child(3) { left: 33%; bottom: 8%; width: 34%; height: 13%; border-radius: 7px; background: linear-gradient(180deg, #2a2a2a, #151515); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16); }
+
+/* Phosphor: glyph wall, sidebar with the active row, a headline with cursor */
+html[data-design^="obsidian"] .d-design-pv[data-pv="phosphor"] {
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(180deg, rgb(0 0 0 / 0.45) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(77 255 136 / 0.16) 0 2px, transparent 2px 5px) 0 0 / 100% 4px,
+    #020703;
+  box-shadow: inset 0 0 0 1px rgb(77 255 136 / 0.35);
+}
+html[data-design^="obsidian"] .d-design-pv[data-pv="phosphor"] i:nth-child(1) { left: 0; top: 0; bottom: 0; width: 26%; background: #020703; box-shadow: inset -1px 0 0 rgb(77 255 136 / 0.45); }
+html[data-design^="obsidian"] .d-design-pv[data-pv="phosphor"] i:nth-child(2) { left: 4%; top: 30%; width: 18%; height: 8%; background: #4dff88; box-shadow: 0 0 8px rgb(77 255 136 / 0.7); }
+html[data-design^="obsidian"] .d-design-pv[data-pv="phosphor"] i:nth-child(3) { left: 33%; top: 18%; width: 44%; height: 10%; background: linear-gradient(90deg, #c9ffd6 0 82%, transparent 82% 86%, #4dff88 86%); box-shadow: 0 0 10px rgb(77 255 136 / 0.4); }
+
+/* Paper: masthead, double rule, a sheet with a hard shadow */
+html[data-design^="obsidian"] .d-design-pv[data-pv="paper"] {
+  border-radius: 3px;
+  background: repeating-linear-gradient(95deg, transparent 0 7px, rgb(23 19 13 / 0.07) 7px 8px), #f2ede3;
+  box-shadow: inset 0 0 0 1px rgb(23 19 13 / 0.3);
+}
+html[data-design^="obsidian"] .d-design-pv[data-pv="paper"] i:nth-child(1) { left: 22%; top: 9%; width: 56%; height: 17%; border-radius: 2px; background: #17130d; }
+html[data-design^="obsidian"] .d-design-pv[data-pv="paper"] i:nth-child(2) { left: 8%; right: 8%; top: 32%; height: 4px; border-top: 1px solid #17130d; border-bottom: 1px solid #17130d; }
+html[data-design^="obsidian"] .d-design-pv[data-pv="paper"] i:nth-child(3) { left: 8%; top: 48%; width: 60%; height: 34%; background: #fbf8f1; box-shadow: 0 0 0 1px #17130d, 3px 3px 0 0 #17130d; }
+
+@media (max-width: 760px) {
+  html[data-design^="obsidian"] .d-designs { grid-template-columns: minmax(0, 1fr); }
+}
+html[data-design^="obsidian"] .d-set-design { margin-top: 28px; }

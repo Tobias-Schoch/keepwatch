@@ -1,0 +1,281 @@
+/* Phosphor — the dashboard as a terminal on a CRT. Everything monospace and square, phosphor
+   green on black with amber and red as the only other colors; no glass, no sheen: surfaces are
+   flat with corner brackets, the active things glow. Navigation: PhosphorShell (sidebar with
+   hotkeys, status line). Background: Faulty Terminal under scanlines (Backdrop.tsx).
+   Doubled attribute selector so these rules win over obsidian.css. */
+
+html[data-design="obsidian-phosphor"][data-design] {
+  --o-bg: #020703;
+  --o-bg-rgb: 2 7 3;
+  /* Lines, hovers and tracks in phosphor instead of white; surfaces near black-green. */
+  --o-ink: 110 255 150;
+  --o-surf: 3 12 6;
+  --o-text: #c9ffd6;
+  --o-dim: rgb(150 245 175 / 0.8);
+  --o-mute: rgb(120 230 150 / 0.58);
+  --o-faint: rgb(110 220 140 / 0.34);
+  --o-line: rgb(110 255 150 / 0.15);
+  --o-line-2: rgb(110 255 150 / 0.3);
+  --o-accent: #4dff88;
+  --o-acc: 77 255 136;
+  --o-acc-hi: 180 255 205;
+  --o-acc-1: #b4ffcd;
+  --o-acc-2: #1f9d4c;
+  --o-hi: #e8fff0;
+  --o-hi-2: #c9ffd6;
+  --o-silver: #7ee89f;
+  --o-silver-dim: #3f9c5b;
+  --o-mark-1: #c9ffd6;
+  --o-mark-2: #4dff88;
+  --o-mark-3: #0b3a1a;
+  --o-mark-4: #b4ffcd;
+  --o-mark-5: #062010;
+  --o-glass: 2 9 4;
+  --o-glass-a: 0.9;
+  --o-radius: 0px;
+  --o-ok: rgb(77 255 136);
+  --o-sand: rgb(255 191 0);
+  --o-apricot: rgb(255 138 46);
+  --o-rose: rgb(255 82 82);
+  --o-sans: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --o-mono: var(--o-sans);
+  --o-glow: 0 0 6px rgb(77 255 136 / 0.5);
+  --ph-side: 248px;
+  --ph-status: 28px;
+}
+html[data-design="obsidian-phosphor"][data-design] body { font-size: 13px; letter-spacing: 0; text-shadow: 0 0 5px rgb(77 255 136 / 0.26); }
+/* A terminal has no round corners. */
+html[data-design="obsidian-phosphor"][data-design] *, html[data-design="obsidian-phosphor"][data-design] *::before, html[data-design="obsidian-phosphor"][data-design] *::after { border-radius: 0 !important; }
+html[data-design="obsidian-phosphor"][data-design] ::selection { background: var(--o-accent); color: var(--o-bg); text-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] :focus-visible:not(input, textarea) { outline: 1px dashed var(--o-accent); outline-offset: 3px; }
+html[data-design="obsidian-phosphor"][data-design] ::-webkit-scrollbar-thumb { background: rgb(77 255 136 / 0.25); border: 0; }
+
+html[data-design="obsidian-phosphor"][data-design] [data-tone="neutral"] { --t: 150 230 170; }
+html[data-design="obsidian-phosphor"][data-design] [data-tone="accent"], html[data-design="obsidian-phosphor"][data-design] [data-tone="brand"], html[data-design="obsidian-phosphor"][data-design] [data-tone="ok"] { --t: 77 255 136; }
+html[data-design="obsidian-phosphor"][data-design] [data-tone="sand"] { --t: 255 191 0; }
+html[data-design="obsidian-phosphor"][data-design] [data-tone="apricot"] { --t: 255 138 46; }
+html[data-design="obsidian-phosphor"][data-design] [data-tone="rose"], html[data-design="obsidian-phosphor"][data-design] [data-tone="danger"] { --t: 255 82 82; }
+
+/* ---- Scanlines over everything, a CRT tube behind ------------------------------------- */
+html[data-design="obsidian-phosphor"][data-design] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 3px);
+}
+html[data-design="obsidian-phosphor"][data-design] .ph-crt {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(180deg, rgb(0 0 0 / 0.3) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 115% 95% at 50% 50%, transparent 52%, rgb(0 0 0 / 0.8) 100%);
+}
+html[data-design="obsidian-phosphor"][data-design] .o-rb-app .o-rb-veil {
+  background: radial-gradient(ellipse 58% 72% at 58% 46%, rgb(var(--o-bg-rgb) / 0.72), rgb(var(--o-bg-rgb) / 0.3) 80%);
+}
+
+/* ---- Type ---------------------------------------------------------------------------- */
+html[data-design="obsidian-phosphor"][data-design] .o-display {
+  font-size: clamp(30px, 4.2vw, 54px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  text-transform: uppercase;
+  filter: drop-shadow(0 0 10px rgb(77 255 136 / 0.35));
+}
+html[data-design="obsidian-phosphor"][data-design] .o-display .o-blur-word, html[data-design="obsidian-phosphor"][data-design] .o-display .o-shiny { text-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] .o-display::before { content: "> "; color: var(--o-accent); }
+html[data-design="obsidian-phosphor"][data-design] .o-display::after {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 0.82em;
+  margin-left: 0.14em;
+  vertical-align: -0.06em;
+  background: var(--o-accent);
+  animation: ph-blink 1.05s steps(1) infinite;
+}
+html[data-design="obsidian-phosphor"][data-design] .o-h1 { text-transform: uppercase; letter-spacing: 0.02em; font-size: 20px; }
+html[data-design="obsidian-phosphor"][data-design] .o-h2 { text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; font-weight: 700; }
+html[data-design="obsidian-phosphor"][data-design] .o-h2::before { content: "##"; color: var(--o-faint); font-weight: 400; }
+html[data-design="obsidian-phosphor"][data-design] .o-micro, html[data-design="obsidian-phosphor"][data-design] .o-label, html[data-design="obsidian-phosphor"][data-design] .o-tile-label, html[data-design="obsidian-phosphor"][data-design] .o-eyebrow { letter-spacing: 0.12em; font-size: 10.5px; }
+html[data-design="obsidian-phosphor"][data-design] .o-eyebrow::before { content: "// "; color: var(--o-faint); }
+html[data-design="obsidian-phosphor"][data-design] .o-lead { font-size: 15px; }
+html[data-design="obsidian-phosphor"][data-design] .o-link { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--o-line-2); }
+
+/* ---- Surfaces: flat, a hairline frame, corner brackets in phosphor --------------------- */
+html[data-design="obsidian-phosphor"][data-design] .o-panel, html[data-design="obsidian-phosphor"][data-design] .o-tile-in, html[data-design="obsidian-phosphor"][data-design] .o-ccard, html[data-design="obsidian-phosphor"][data-design] .o-code, html[data-design="obsidian-phosphor"][data-design] .o-preview, html[data-design="obsidian-phosphor"][data-design] .o-empty, html[data-design="obsidian-phosphor"][data-design] .o-calm, html[data-design="obsidian-phosphor"][data-design] .o-alist, html[data-design="obsidian-phosphor"][data-design] .o-gate-card {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background:
+    radial-gradient(360px circle at var(--gx, -999px) var(--gy, -999px), rgb(77 255 136 / calc(0.07 * var(--gi, 0))), transparent 60%),
+    rgb(var(--o-glass) / var(--o-glass-a));
+  box-shadow: inset 0 0 0 1px var(--o-line-2);
+}
+html[data-design="obsidian-phosphor"][data-design] .o-panel::before, html[data-design="obsidian-phosphor"][data-design] .o-tile-in::before, html[data-design="obsidian-phosphor"][data-design] .o-ccard::before, html[data-design="obsidian-phosphor"][data-design] .o-code::before, html[data-design="obsidian-phosphor"][data-design] .o-preview::before, html[data-design="obsidian-phosphor"][data-design] .o-empty::before, html[data-design="obsidian-phosphor"][data-design] .o-alist::before, html[data-design="obsidian-phosphor"][data-design] .o-gate-card::before, html[data-design="obsidian-phosphor"][data-design] .o-dialog::before, html[data-design="obsidian-phosphor"][data-design] .o-lcard::before {
+  background:
+    linear-gradient(var(--o-accent) 0 0) left top / 12px 1px,
+    linear-gradient(var(--o-accent) 0 0) left top / 1px 12px,
+    linear-gradient(var(--o-accent) 0 0) right top / 12px 1px,
+    linear-gradient(var(--o-accent) 0 0) right top / 1px 12px,
+    linear-gradient(var(--o-accent) 0 0) left bottom / 12px 1px,
+    linear-gradient(var(--o-accent) 0 0) left bottom / 1px 12px,
+    linear-gradient(var(--o-accent) 0 0) right bottom / 12px 1px,
+    linear-gradient(var(--o-accent) 0 0) right bottom / 1px 12px;
+  background-repeat: no-repeat;
+  opacity: 0.9;
+  -webkit-mask: none;
+  mask: none;
+}
+html[data-design="obsidian-phosphor"][data-design] .o-panel[data-tone="danger"] { background: rgb(var(--o-glass) / 0.92); box-shadow: inset 0 0 0 1px rgb(255 82 82 / 0.55), 0 0 30px -12px rgb(255 82 82 / 0.5); }
+html[data-design="obsidian-phosphor"][data-design] .o-panel[data-tone="accent"] { background: rgb(var(--o-glass) / 0.92); box-shadow: inset 0 0 0 1px rgb(77 255 136 / 0.55), 0 0 30px -12px rgb(77 255 136 / 0.5); }
+html[data-design="obsidian-phosphor"][data-design] .o-panel[data-tone="sand"] { box-shadow: inset 0 0 0 1px rgb(255 191 0 / 0.5); }
+html[data-design="obsidian-phosphor"][data-design] .o-tile-in:hover, html[data-design="obsidian-phosphor"][data-design] .o-ccard:hover { transform: none; box-shadow: inset 0 0 0 1px var(--o-accent), 0 0 24px -10px rgb(77 255 136 / 0.6); }
+html[data-design="obsidian-phosphor"][data-design] .o-inset, html[data-design="obsidian-phosphor"][data-design] .o-switch-row { background: rgb(0 0 0 / 0.35); }
+
+/* ---- Controls --------------------------------------------------------------------------- */
+html[data-design="obsidian-phosphor"][data-design] .o-spec::before, html[data-design="obsidian-phosphor"][data-design] .o-spec::after { display: none; }
+html[data-design="obsidian-phosphor"][data-design] .o-btn { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; font-size: 11.5px; }
+html[data-design="obsidian-phosphor"][data-design] .o-btn:active:not(:disabled) { transform: none; filter: brightness(1.4); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-primary { color: var(--o-bg); background: var(--o-accent); box-shadow: 0 0 0 1px var(--o-accent), 0 0 18px -4px rgb(77 255 136 / 0.7); text-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-primary:hover:not(:disabled) { background: var(--o-acc-1); box-shadow: 0 0 0 1px var(--o-acc-1), 0 0 26px -2px rgb(77 255 136 / 0.8); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-primary:disabled { background: transparent; box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-secondary, html[data-design="obsidian-phosphor"][data-design] .o-btn-accent { background: rgb(0 0 0 / 0.4); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-secondary:hover:not(:disabled), html[data-design="obsidian-phosphor"][data-design] .o-btn-accent:hover:not(:disabled) { background: rgb(77 255 136 / 0.12); box-shadow: inset 0 0 0 1px var(--o-accent); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-ghost:hover:not(:disabled) { background: rgb(77 255 136 / 0.1); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-danger { color: var(--o-rose); background: transparent; box-shadow: inset 0 0 0 1px rgb(255 82 82 / 0.55); }
+html[data-design="obsidian-phosphor"][data-design] .o-btn-danger:hover:not(:disabled) { color: var(--o-bg); background: var(--o-rose); box-shadow: 0 0 22px -4px rgb(255 82 82 / 0.7); text-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] .o-icon-btn:hover:not(:disabled) { background: rgb(77 255 136 / 0.1); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design="obsidian-phosphor"][data-design] .o-kbd { background: transparent; box-shadow: inset 0 0 0 1px var(--o-line-2); font-family: var(--o-mono); }
+html[data-design="obsidian-phosphor"][data-design] .o-pill { gap: 0; padding: 0 3px; background: rgb(var(--t) / 0.07); box-shadow: none; font-size: 11px; letter-spacing: 0.02em; }
+html[data-design="obsidian-phosphor"][data-design] .o-pill::before { content: "["; margin-right: 3px; opacity: 0.7; }
+html[data-design="obsidian-phosphor"][data-design] .o-pill::after { content: "]"; margin-left: 3px; opacity: 0.7; }
+html[data-design="obsidian-phosphor"][data-design] .o-pill-dot { margin-right: 6px; box-shadow: 0 0 6px rgb(var(--t)); }
+html[data-design="obsidian-phosphor"][data-design] .o-input { background: rgb(0 0 0 / 0.5); box-shadow: inset 0 0 0 1px var(--o-line-2); caret-color: var(--o-accent); }
+html[data-design="obsidian-phosphor"][data-design] .o-input:focus { box-shadow: inset 0 0 0 1px var(--o-accent), 0 0 18px -6px rgb(77 255 136 / 0.6); }
+html[data-design="obsidian-phosphor"][data-design] .o-search { background: rgb(0 0 0 / 0.5); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design="obsidian-phosphor"][data-design] .o-toggle { background: rgb(0 0 0 / 0.5); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design="obsidian-phosphor"][data-design] .o-toggle-knob { background: var(--o-mute); box-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] .o-toggle.is-on { background: var(--o-accent); box-shadow: 0 0 16px -2px rgb(77 255 136 / 0.7); }
+html[data-design="obsidian-phosphor"][data-design] .o-toggle.is-on .o-toggle-knob { background: var(--o-bg); }
+html[data-design="obsidian-phosphor"][data-design] .o-seg { background: rgb(0 0 0 / 0.45); box-shadow: inset 0 0 0 1px var(--o-line-2); }
+html[data-design="obsidian-phosphor"][data-design] .o-seg-ind { background: var(--o-accent); box-shadow: 0 0 14px -2px rgb(77 255 136 / 0.6); }
+html[data-design="obsidian-phosphor"][data-design] .o-seg-btn { text-transform: uppercase; letter-spacing: 0.06em; font-size: 11.5px; }
+html[data-design="obsidian-phosphor"][data-design] .o-seg-btn.is-on, html[data-design="obsidian-phosphor"][data-design] .o-seg-btn.is-on .o-seg-count { color: var(--o-bg); text-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] .d-bar > i, html[data-design="obsidian-phosphor"][data-design] .o-meter > i { box-shadow: 0 0 10px rgb(var(--t) / 0.6); }
+
+/* ---- Dialogs, toasts, save bar ------------------------------------------------------------ */
+html[data-design="obsidian-phosphor"][data-design] .o-overlay-backdrop { background: rgb(var(--o-bg-rgb) / 0.82); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html[data-design="obsidian-phosphor"][data-design] .o-dialog {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgb(var(--o-glass));
+  box-shadow: inset 0 0 0 1px var(--o-accent), 0 0 0 4px rgb(var(--o-bg-rgb)), 0 0 0 5px var(--o-line-2), 0 0 70px -10px rgb(77 255 136 / 0.35);
+}
+html[data-design="obsidian-phosphor"][data-design] .o-toasts { top: 20px; left: calc(50% + var(--ph-side) / 2); }
+html[data-design="obsidian-phosphor"][data-design] .o-savebar-wrap { bottom: calc(var(--ph-status) + 20px); padding-left: calc(var(--ph-side) + 16px); }
+
+/* ---- Frame: sidebar, stage, status line ----------------------------------------------------- */
+html[data-design="obsidian-phosphor"][data-design] .ph-stage { padding: 44px 0 calc(var(--ph-status) + 72px) var(--ph-side); }
+html[data-design="obsidian-phosphor"][data-design] .ph-stage .o-wrap { max-width: 1140px; }
+html[data-design="obsidian-phosphor"][data-design] .ph-side {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  bottom: var(--ph-status);
+  left: 0;
+  width: var(--ph-side);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 22px 18px 16px;
+  background: rgb(var(--o-bg-rgb) / 0.9);
+  box-shadow: inset -1px 0 0 var(--o-line-2);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+html[data-design="obsidian-phosphor"][data-design] .ph-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; }
+html[data-design="obsidian-phosphor"][data-design] .ph-logo { font-size: 15px; font-weight: 800; letter-spacing: 0.14em; color: var(--o-accent); text-shadow: var(--o-glow), 0 0 22px rgb(77 255 136 / 0.4); white-space: nowrap; }
+html[data-design="obsidian-phosphor"][data-design] .ph-host { font-size: 11.5px; color: var(--o-mute); }
+html[data-design="obsidian-phosphor"][data-design] .ph-host b { font-weight: 500; color: var(--o-dim); }
+html[data-design="obsidian-phosphor"][data-design] .ph-cmd {
+  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px 0 10px;
+  color: var(--o-mute); background: rgb(0 0 0 / 0.45); box-shadow: inset 0 0 0 1px var(--o-line-2);
+  transition: box-shadow 0.15s, color 0.15s;
+}
+html[data-design="obsidian-phosphor"][data-design] .ph-cmd:hover { color: var(--o-text); box-shadow: inset 0 0 0 1px var(--o-accent), 0 0 18px -8px rgb(77 255 136 / 0.7); }
+html[data-design="obsidian-phosphor"][data-design] .ph-prompt { color: var(--o-accent); font-weight: 700; }
+html[data-design="obsidian-phosphor"][data-design] .ph-caret { width: 7px; height: 14px; margin-right: auto; background: var(--o-accent); animation: ph-blink 1.05s steps(1) infinite; }
+html[data-design="obsidian-phosphor"][data-design] .ph-key {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px;
+  font: 600 11px/1 var(--o-mono); color: var(--o-dim); box-shadow: inset 0 0 0 1px var(--o-line-2);
+}
+html[data-design="obsidian-phosphor"][data-design] .ph-head { margin-bottom: 6px; font-size: 10.5px; letter-spacing: 0.1em; color: var(--o-faint); text-transform: uppercase; white-space: nowrap; }
+html[data-design="obsidian-phosphor"][data-design] .ph-nav { display: flex; flex-direction: column; gap: 2px; }
+html[data-design="obsidian-phosphor"][data-design] .ph-item {
+  display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px;
+  font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; color: var(--o-dim);
+  transition: background 0.12s, color 0.12s;
+}
+html[data-design="obsidian-phosphor"][data-design] .ph-item:hover { color: var(--o-text); background: rgb(77 255 136 / 0.09); }
+html[data-design="obsidian-phosphor"][data-design] .ph-item.is-on { color: var(--o-bg); background: var(--o-accent); text-shadow: none; box-shadow: 0 0 22px -4px rgb(77 255 136 / 0.65); }
+html[data-design="obsidian-phosphor"][data-design] .ph-item.is-on .ph-key { color: var(--o-bg); box-shadow: inset 0 0 0 1px rgb(var(--o-bg-rgb) / 0.45); }
+html[data-design="obsidian-phosphor"][data-design] .ph-item-label { flex: 1; min-width: 0; }
+html[data-design="obsidian-phosphor"][data-design] .ph-alert { font-size: 11px; font-weight: 800; color: rgb(var(--t)); animation: ph-blink 1.6s steps(1) infinite; }
+html[data-design="obsidian-phosphor"][data-design] .ph-item.is-on .ph-alert { color: var(--o-bg); }
+html[data-design="obsidian-phosphor"][data-design] .ph-sys { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; }
+html[data-design="obsidian-phosphor"][data-design] .ph-row { display: flex; justify-content: space-between; gap: 10px; color: var(--o-mute); white-space: nowrap; }
+html[data-design="obsidian-phosphor"][data-design] .ph-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--o-dim); }
+html[data-design="obsidian-phosphor"][data-design] .ph-bar { letter-spacing: -0.04em; }
+html[data-design="obsidian-phosphor"][data-design] .ph-bar i { font-style: normal; color: rgb(var(--t, 77 255 136)); }
+html[data-design="obsidian-phosphor"][data-design] .ph-bar span { color: var(--o-faint); }
+html[data-design="obsidian-phosphor"][data-design] .ph-side-foot { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+html[data-design="obsidian-phosphor"][data-design] .ph-side-foot .o-server { height: auto; padding: 0; }
+html[data-design="obsidian-phosphor"][data-design] .ph-link { font-size: 12px; color: var(--o-mute); transition: color 0.12s; }
+html[data-design="obsidian-phosphor"][data-design] .ph-link:hover { color: var(--o-text); }
+html[data-design="obsidian-phosphor"][data-design] .o-server i { box-shadow: 0 0 8px var(--o-ok); }
+
+html[data-design="obsidian-phosphor"][data-design] .ph-status {
+  position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; height: var(--ph-status);
+  display: flex; align-items: stretch;
+  font-size: 11.5px; color: var(--o-mute);
+  background: rgb(var(--o-bg-rgb));
+  box-shadow: inset 0 1px 0 var(--o-line-2);
+}
+html[data-design="obsidian-phosphor"][data-design] .ph-status > * { display: flex; align-items: center; padding: 0 12px; white-space: nowrap; }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-mode { font-weight: 800; letter-spacing: 0.12em; color: var(--o-bg); background: var(--o-accent); text-shadow: none; }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-mode[data-mock] { background: var(--o-sand); }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-path { color: var(--o-text); background: rgb(77 255 136 / 0.13); }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-fill { flex: 1; padding: 0; }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-issues { color: rgb(var(--t)); }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-design { box-shadow: inset 1px 0 0 var(--o-line); transition: color 0.12s; }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-design:hover { color: var(--o-text); }
+html[data-design="obsidian-phosphor"][data-design] .ph-st-clock { color: var(--o-text); background: rgb(77 255 136 / 0.13); }
+
+/* Cursor light: no white bloom (Border Glow), only the frame lights up in phosphor near the cursor. */
+html[data-design="obsidian-phosphor"][data-design] .o-bglow { display: none; }
+html[data-design="obsidian-phosphor"][data-design] [data-light]::after {
+  background: radial-gradient(200px circle at var(--gx, -999px) var(--gy, -999px), var(--o-accent), rgb(77 255 136 / 0.35) 45%, transparent 75%);
+}
+
+@keyframes ph-blink { 50% { opacity: 0; } }
+
+@media (max-width: 900px) {
+  html[data-design="obsidian-phosphor"][data-design] { --ph-side: 0px; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-side {
+    position: sticky; bottom: auto; width: auto; flex-direction: row; flex-wrap: wrap; align-items: center;
+    gap: 10px 14px; padding: 12px 16px 10px; overflow: visible; box-shadow: inset 0 -1px 0 var(--o-line-2);
+  }
+  html[data-design="obsidian-phosphor"][data-design] .ph-sys, html[data-design="obsidian-phosphor"][data-design] .ph-head, html[data-design="obsidian-phosphor"][data-design] .ph-side-foot, html[data-design="obsidian-phosphor"][data-design] .ph-host, html[data-design="obsidian-phosphor"][data-design] .ph-cmd-text, html[data-design="obsidian-phosphor"][data-design] .ph-cmd .ph-key { display: none; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-cmd { margin-left: auto; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-nav { flex-basis: 100%; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-nav::-webkit-scrollbar { display: none; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-item { flex-shrink: 0; height: 30px; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-stage { padding-top: 24px; }
+  html[data-design="obsidian-phosphor"][data-design] .ph-st-design { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-design="obsidian-phosphor"][data-design] .o-display::after, html[data-design="obsidian-phosphor"][data-design] .ph-caret, html[data-design="obsidian-phosphor"][data-design] .ph-alert { animation: none; }
+}

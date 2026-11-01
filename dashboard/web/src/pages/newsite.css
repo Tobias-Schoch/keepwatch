@@ -9,7 +9,7 @@ html[data-design^="obsidian"] .ns-bar { position: absolute; left: 24px; right: 2
 html[data-design^="obsidian"] .ns-bar i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, rgb(var(--o-acc) / 0.25), var(--o-accent)); box-shadow: 0 0 12px rgb(var(--o-acc) / 0.5); transition: width 0.5s var(--o-ease); }
 html[data-design^="obsidian"] .ns-progress ol { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
 html[data-design^="obsidian"] .ns-step { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 8px; border-radius: 10px; color: var(--o-mute); font-size: 13px; text-align: left; transition: color 0.2s, background 0.2s; }
-html[data-design^="obsidian"] .ns-step:not(:disabled):hover { color: var(--o-text); background: rgba(255, 255, 255, 0.04); }
+html[data-design^="obsidian"] .ns-step:not(:disabled):hover { color: var(--o-text); background: rgb(var(--o-ink, 255 255 255) / 0.04); }
 html[data-design^="obsidian"] .ns-step:disabled { cursor: default; }
 html[data-design^="obsidian"] .ns-step-dot { display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 22px; border-radius: 99px; font-size: 11.5px; font-weight: 600; color: var(--o-mute); box-shadow: inset 0 0 0 1px var(--o-line-2); }
 html[data-design^="obsidian"] .ns-step-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -23,7 +23,7 @@ html[data-design^="obsidian"] .ns-domain-row { display: flex; flex-wrap: wrap; a
 html[data-design^="obsidian"] .ns-domain-row .o-input { flex: 1 1 280px; font-size: 15px; }
 html[data-design^="obsidian"] .ns-www { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--o-dim); cursor: pointer; }
 html[data-design^="obsidian"] .ns-checking { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--o-mute); }
-html[data-design^="obsidian"] .ns-dns { border-radius: 14px; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .ns-dns { border-radius: 14px; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .ns-dns-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px 8px 14px; border-bottom: 1px solid var(--o-line); }
 html[data-design^="obsidian"] .ns-dns-row { display: flex; gap: 12px; padding: 12px 14px; }
 html[data-design^="obsidian"] .ns-dns-row + .ns-dns-row { border-top: 1px solid var(--o-line); }
@@ -34,15 +34,15 @@ html[data-design^="obsidian"] .ns-dns-name { font-size: 13.5px; color: var(--o-t
 html[data-design^="obsidian"] .ns-dns-recs { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 3px; font-size: 12.5px; color: var(--o-mute); }
 html[data-design^="obsidian"] .ns-dns-recs b { font-weight: 500; color: var(--o-dim); }
 html[data-design^="obsidian"] .ns-problem { margin: 6px 0 0; font-size: 12.5px; color: var(--o-rose); line-height: 1.5; }
-html[data-design^="obsidian"] .ns-mock { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.6; color: var(--o-mute); background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--o-line-2); }
+html[data-design^="obsidian"] .ns-mock { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.6; color: var(--o-mute); background: rgb(var(--o-ink, 255 255 255) / 0.02); border: 1px dashed var(--o-line-2); }
 html[data-design^="obsidian"] .ns-mock b { font-weight: 500; color: var(--o-dim); font-family: var(--o-mono); }
 
 /* Step 2 */
 html[data-design^="obsidian"] .ns-targets { display: flex; flex-direction: column; gap: 14px; }
 html[data-design^="obsidian"] .ns-group { display: flex; flex-direction: column; gap: 4px; }
 html[data-design^="obsidian"] .ns-group-title { margin: 0 0 2px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--o-mute); }
-html[data-design^="obsidian"] .ns-target { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 12px; text-align: left; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); transition: background 0.2s, box-shadow 0.2s, opacity 0.2s; }
-html[data-design^="obsidian"] .ns-target:hover { background: rgba(255, 255, 255, 0.045); }
+html[data-design^="obsidian"] .ns-target { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 12px; text-align: left; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); transition: background 0.2s, box-shadow 0.2s, opacity 0.2s; }
+html[data-design^="obsidian"] .ns-target:hover { background: rgb(var(--o-ink, 255 255 255) / 0.045); }
 html[data-design^="obsidian"] .ns-target.is-on { background: rgb(var(--o-acc) / 0.08); box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.5); }
 html[data-design^="obsidian"] .ns-target.is-used:not(.is-on), html[data-design^="obsidian"] .ns-target.is-cut:not(.is-on) { opacity: 0.55; }
 html[data-design^="obsidian"] .ns-target.is-used:hover, html[data-design^="obsidian"] .ns-target.is-cut:hover { opacity: 0.85; }
@@ -53,12 +53,12 @@ html[data-design^="obsidian"] .ns-target-meta { display: block; margin-top: 2px;
 html[data-design^="obsidian"] .ns-target-pills { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 html[data-design^="obsidian"] .ns-port { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
 html[data-design^="obsidian"] .ns-port-input { width: 96px; }
-html[data-design^="obsidian"] .ns-code { position: relative; margin: 10px 0; border-radius: 10px; background: rgba(0, 0, 0, 0.3); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .ns-code { position: relative; margin: 10px 0; border-radius: 10px; background: rgb(var(--o-shade, 0 0 0) / 0.3); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .ns-code pre { margin: 0; padding: 12px 14px; font: 12px/1.55 var(--o-mono); color: var(--o-dim); overflow-x: auto; }
 html[data-design^="obsidian"] .ns-code .o-icon-btn { position: absolute; top: 8px; right: 8px; }
 
 /* Step 3 */
-html[data-design^="obsidian"] .ns-switches { border-radius: 14px; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .ns-switches { border-radius: 14px; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .ns-switch { display: flex; align-items: center; gap: 14px; padding: 12px 14px; transition: opacity 0.2s; }
 html[data-design^="obsidian"] .ns-switch + .ns-switch { border-top: 1px solid var(--o-line); }
 html[data-design^="obsidian"] .ns-switch.is-off { opacity: 0.45; }
@@ -68,17 +68,17 @@ html[data-design^="obsidian"] .ns-switch-count { font: 500 11.5px/1 var(--o-mono
 
 /* Step 4 */
 html[data-design^="obsidian"] .ns-lists { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
-html[data-design^="obsidian"] .ns-list { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; text-align: left; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); transition: background 0.2s, box-shadow 0.2s; }
-html[data-design^="obsidian"] .ns-list:hover { background: rgba(255, 255, 255, 0.045); }
+html[data-design^="obsidian"] .ns-list { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; text-align: left; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); transition: background 0.2s, box-shadow 0.2s; }
+html[data-design^="obsidian"] .ns-list:hover { background: rgb(var(--o-ink, 255 255 255) / 0.045); }
 html[data-design^="obsidian"] .ns-list.is-on { background: rgb(var(--o-acc) / 0.08); box-shadow: inset 0 0 0 1px rgb(var(--o-acc) / 0.5); }
 html[data-design^="obsidian"] .ns-check { display: grid; place-items: center; flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; border-radius: 5px; color: #0b0b10; box-shadow: inset 0 0 0 1.5px var(--o-line-2); }
 html[data-design^="obsidian"] .ns-list.is-on .ns-check { background: var(--o-accent); box-shadow: none; }
 html[data-design^="obsidian"] .ns-list-name { display: block; font-size: 13.5px; font-weight: 500; color: var(--o-text); }
 html[data-design^="obsidian"] .ns-list-meta { display: block; margin-top: 2px; font-size: 12px; color: var(--o-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-html[data-design^="obsidian"] .ns-add { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .ns-add { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
 
 /* Step 5 */
-html[data-design^="obsidian"] .ns-summary { margin: 0; border-radius: 14px; background: rgba(255, 255, 255, 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
+html[data-design^="obsidian"] .ns-summary { margin: 0; border-radius: 14px; background: rgb(var(--o-ink, 255 255 255) / 0.02); box-shadow: inset 0 0 0 1px var(--o-line); }
 html[data-design^="obsidian"] .ns-summary > div { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: baseline; gap: 12px; padding: 12px 14px; }
 html[data-design^="obsidian"] .ns-summary > div + div { border-top: 1px solid var(--o-line); }
 html[data-design^="obsidian"] .ns-summary dt { font-size: 12.5px; color: var(--o-mute); }
