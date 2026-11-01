@@ -6,8 +6,8 @@
  * the noise, the cursor spring (tension, friction, maxCursorMove) and the smoothed cursor
  * speed that decides how far the lines get pushed.
  *
- * Paper: all lines go into a single path and one stroke per frame (the original strokes
- * each line on its own); the color comes from the design (--o-wave). At most `fps`
+ * Changed: all lines go into a single path and one stroke per frame (the original strokes
+ * each line on its own); the color comes from the CSS (--o-wave). At most `fps`
  * frames per second, paused while the tab is hidden, a still frame with reduced motion.
  */
 

@@ -20,14 +20,11 @@ import type { Overview } from "./types";
 import { useConfig } from "./config";
 import "./design/obsidian.css";
 import "./design/variants.css";
-import "./design/themes/phosphor.css";
-import "./design/themes/paper.css";
-import "./design/themes/light.css";
+import "./design/light.css";
 import "./dash.css";
 
 /**
- * Keepwatch dashboard on the Obsidian base, in one of three designs (design/theme.ts):
- * Graphite, Phosphor or Paper – picked per browser under Settings or with ⌘K.
+ * Keepwatch dashboard, design "Obsidian Graphite" – dark or light (design/theme.ts, toggle in the header).
  * No login: it only listens on 127.0.0.1 of the server, so you reach it through an SSH tunnel
  * (`./keepwatch tunnel`, the macOS app or `ssh -L`) – your SSH key is the login.
  */

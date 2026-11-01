@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useConfig } from "../config";
-import { dockView, dockViews, useNav, viewProblems } from "../nav";
+import { dockView, dockViews, useNav } from "../nav";
 import { prefersReduced, Spring, SPRING } from "./motion";
 import { cx } from "./ui";
 
@@ -106,7 +106,8 @@ export function Dock() {
       <div ref={dockRef} className="o-dock" onPointerMove={(e) => e.pointerType !== "touch" && magnify(e.clientX)} onPointerLeave={() => magnify(null)}>
         <span ref={glassRef} className="o-dock-bg" data-light aria-hidden />
         {views.map((v, i) => {
-          const { probs, alert } = viewProblems(v, health);
+          const probs = v.areas ? health.filter((h) => v.areas!.includes(h.area)) : [];
+          const alert = probs.some((p) => p.level === "crit") ? "rose" : probs.length ? "sand" : undefined;
           const Icon = v.icon;
           return (
             <span key={v.id} className="contents">

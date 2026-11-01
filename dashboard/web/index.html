@@ -9,14 +9,12 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5 21 8l-9 14.5L3 8z' fill='%23d8d8d8'/%3E%3C/svg%3E" />
     <title>Keepwatch</title>
     <script>
-      // Design and light/dark mode of this browser (src/design/theme.ts) before the first paint – no flash on reload.
+      // Light or dark mode of this browser (src/design/theme.ts) before the first paint – no flash on reload.
       try {
-        var d = localStorage.getItem("kw-design");
-        var html = document.documentElement;
-        if (d === "phosphor" || d === "paper") html.setAttribute("data-design", "obsidian-" + d);
-        if (localStorage.getItem("kw-mode") === "light") html.setAttribute("data-mode", "light");
-        if (d === "paper" || (d !== "phosphor" && html.getAttribute("data-mode") === "light"))
+        if (localStorage.getItem("kw-mode") === "light") {
+          document.documentElement.setAttribute("data-mode", "light");
           document.querySelector('meta[name="color-scheme"]').setAttribute("content", "light");
+        }
       } catch (e) {}
     </script>
   </head>

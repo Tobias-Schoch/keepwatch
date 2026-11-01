@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, refreshAll, usePoll } from "../api";
 import { Chips, Loading, PageHero, Stale } from "../common";
 import { has, useConfig } from "../config";
-import { DesignPicker } from "../design/DesignPicker";
 import { Reveal } from "../design/fx";
 import { Button, Callout, Confirm, CopyButton, cx, Field, IconButton, KeyValue, Panel, Pill, Toggle } from "../design/ui";
 import { ago, agoShort, minutesOf, timeZone } from "../format";
@@ -697,13 +696,6 @@ export function SettingsPage() {
           );
         }}
       </Loading>
-      {/* Not a server setting – outside Loading, so it works even when the server doesn't answer. */}
-      <Reveal delay={200} className="d-set-group d-set-design">
-        <h2 className="d-group-title">Design · this browser</h2>
-        <Panel className="d-set-panel">
-          <DesignPicker />
-        </Panel>
-      </Reveal>
     </div>
   );
 }

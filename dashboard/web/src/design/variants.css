@@ -1,4 +1,4 @@
-/* Obsidian Graphite — the default design. Everything shared lives in obsidian.css
+/* Obsidian Graphite — the dashboard's only design. Everything shared lives in obsidian.css
    (html[data-design^="obsidian"]); this file only turns color, light and material to graphite.
    Doubled attribute selector so these rules always win. */
 

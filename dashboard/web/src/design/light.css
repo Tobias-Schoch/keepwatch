@@ -1,7 +1,7 @@
-/* Graphite light — the same glass, dock and type as Graphite, laid on Paper's newsprint: warm
-   paper, ink instead of white, ink Waves behind it (Backdrop.tsx). Turned on by the toggle in the
-   header (html[data-mode="light"], design/theme.ts). Tripled attribute selector so these rules
-   win over variants.css. */
+/* Graphite light — the same glass, dock and type as Graphite, laid on newsprint: warm paper, ink
+   instead of white, ink Waves behind it (Backdrop.tsx). Turned on by the toggle in the header
+   (html[data-mode="light"], design/theme.ts). Tripled attribute selector so these rules win over
+   variants.css. */
 
 html[data-design="obsidian-graphit"][data-mode="light"][data-design] {
   --o-bg: #f2ede3;

@@ -7,9 +7,7 @@ import { useNav, viewLabel } from "../nav";
 import { openPalette, PALETTE_KEY } from "../palette/Palette";
 import { Dock } from "./Dock";
 import { GradualBlur } from "./rb/type/GradualBlur";
-import { PaperShell } from "./shells/PaperShell";
-import { PhosphorShell } from "./shells/PhosphorShell";
-import { setMode, useDesign, useMode } from "./theme";
+import { setMode, useMode } from "./theme";
 import { cx, IconButton, Kbd, Pill } from "./ui";
 
 export function Mark({ size = 22 }: { size?: number }) {
@@ -33,58 +31,13 @@ export function Mark({ size = 22 }: { size?: number }) {
   );
 }
 
-/** What every navigation shows: where you are, the host, whether the server answers. */
-export function useShell() {
+export function Shell({ children }: { children: ReactNode }) {
   const { view, go, overview, overviewAt } = useNav();
   const online = useOnline();
-  const { hostname } = useConfig();
   const [spin, setSpin] = useState(false);
-  return {
-    view,
-    go,
-    overview,
-    overviewAt,
-    online,
-    host: overview?.host.hostname ?? hostname,
-    crumb: view === "overview" ? null : viewLabel(view),
-    spin,
-    refresh: () => {
-      setSpin(true);
-      refreshAll();
-      setTimeout(() => setSpin(false), 700);
-    },
-  };
-}
-
-/** Server state: green while it answers, "offline" when not, "sample data" in mock mode. */
-export function ServerState({ className }: { className?: string }) {
-  const { online, overviewAt } = useShell();
-  return (
-    <span
-      className={cx("o-server", className)}
-      data-ok={online === null ? "unknown" : online ? "1" : "0"}
-      title={online === false ? "The server is not responding" : online ? "Time of the last response" : "Connecting…"}
-    >
-      <i />
-      <span className="o-server-host">{online === false ? "offline" : MOCK ? "sample data" : <Since at={overviewAt} />}</span>
-    </span>
-  );
-}
-
-/**
- * The frame around every page. Each design brings its own navigation:
- * Graphite a header and a floating dock, Phosphor a terminal sidebar with a status line,
- * Paper a newspaper masthead with section tabs.
- */
-export function Shell({ children }: { children: ReactNode }) {
-  const design = useDesign();
-  if (design === "phosphor") return <PhosphorShell>{children}</PhosphorShell>;
-  if (design === "paper") return <PaperShell>{children}</PaperShell>;
-  return <GraphiteShell>{children}</GraphiteShell>;
-}
-
-function GraphiteShell({ children }: { children: ReactNode }) {
-  const { view, go, overview, host, crumb, spin, refresh } = useShell();
+  const { hostname } = useConfig();
+  const crumb = view === "overview" ? null : viewLabel(view);
+  const host = overview?.host.hostname ?? hostname;
 
   return (
     <>
@@ -113,9 +66,23 @@ function GraphiteShell({ children }: { children: ReactNode }) {
                 Mock
               </Pill>
             )}
-            <ServerState />
+            <span
+              className="o-server"
+              data-ok={online === null ? "unknown" : online ? "1" : "0"}
+              title={online === false ? "The server is not responding" : online ? "Time of the last response" : "Connecting…"}
+            >
+              <i />
+              <span className="o-server-host">{online === false ? "offline" : MOCK ? "sample data" : <Since at={overviewAt} />}</span>
+            </span>
             <ModeToggle />
-            <IconButton label="Refresh" onClick={refresh}>
+            <IconButton
+              label="Refresh"
+              onClick={() => {
+                setSpin(true);
+                refreshAll();
+                setTimeout(() => setSpin(false), 700);
+              }}
+            >
               <RefreshCw className={cx("h-4 w-4", spin && "o-spin")} />
             </IconButton>
           </div>
@@ -133,7 +100,7 @@ function GraphiteShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** Light / dark for Graphite: the icon shows where the click leads. */
+/** Light / dark: the icon shows where the click leads. */
 function ModeToggle() {
   const mode = useMode();
   const next = mode === "light" ? "dark" : "light";
