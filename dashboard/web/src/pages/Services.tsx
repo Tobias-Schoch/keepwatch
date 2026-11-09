@@ -14,6 +14,7 @@ import { capitalize, INFRA_IMAGE, stackName, unmanagedName } from "../stackNames
 import { portainerStackPath, toolHref, useTool } from "../tools";
 import { fmtUptime, useUptime, type UptimeSite, type UptimeSummary } from "../uptime";
 import { Detail, HEALTH_LABEL, STATE_LABEL, stateTone } from "./Containers";
+import { NewAppWizard } from "./NewApp";
 import { NewSiteWizard } from "./NewSite";
 import { ServiceScore, SiteGradeProvider } from "./SiteGrade";
 import { RenewDueButton, siteHost, SiteList, siteTone, useSiteActions } from "./Sites";
@@ -324,6 +325,7 @@ function ServicesBody() {
   const [env, setEnv] = useState<Stack | null>(null);
   const [deploy, setDeploy] = useState<Stack | null>(null);
   const [newSite, setNewSite] = useState(false);
+  const [newApp, setNewApp] = useState(false);
 
   return (
     <div className="o-wrap d-page">
@@ -357,8 +359,13 @@ function ServicesBody() {
                     <Stale error={dk.error ?? st.error ?? sitesPoll.error} at={dk.at} />
                     {sd && <RenewDueButton d={sd} busy={site.busy} onClick={site.renewDue} />}
                     {proxy && (
-                      <Button variant="primary" onClick={() => setNewSite(true)}>
+                      <Button variant={portainer ? "secondary" : "primary"} onClick={() => setNewSite(true)}>
                         <Plus className="h-4 w-4" /> New site
+                      </Button>
+                    )}
+                    {proxy && portainer && (
+                      <Button variant="primary" onClick={() => setNewApp(true)}>
+                        <Rocket className="h-4 w-4" /> New app
                       </Button>
                     )}
                   </div>
@@ -411,6 +418,7 @@ function ServicesBody() {
               {proxy && <UptimeFeed onData={setUptime} />}
               {site.dialogs}
               {proxy && newSite && <NewSiteWizard onClose={() => (setNewSite(false), void sitesPoll.refresh())} />}
+              {proxy && portainer && newApp && <NewAppWizard onClose={() => (setNewApp(false), void sitesPoll.refresh())} />}
               {cur && <Detail key={cur.name} c={cur} onClose={() => setOpen(null)} />}
               {portainer && env && <EnvSheet s={env} canEdit={connected} onClose={() => setEnv(null)} />}
               {portainer && deploy && <Redeploy s={deploy} onClose={() => setDeploy(null)} />}

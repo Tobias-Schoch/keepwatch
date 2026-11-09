@@ -70,7 +70,7 @@ const STATE_LABEL: Record<JobStepState, string> = {
   cancelled: "cancelled",
 };
 
-interface Row {
+export interface Row {
   key: number;
   value: string;
   note: string;
@@ -98,53 +98,17 @@ function settle(f: SslFlags): SslFlags {
   return n;
 }
 
-const looksLikeDomain = (s: string) => /\S+\.\S{2,}/.test(s.trim());
+export const looksLikeDomain = (s: string) => /\S+\.\S{2,}/.test(s.trim());
 
-/* ========================================================================= */
-
-export function NewSiteWizard({ onClose }: { onClose: () => void }) {
-  const [data, setData] = useState<WizardData | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [step, setStep] = useState(0);
-  const [reached, setReached] = useState(0);
-
-  // 1 Domain
+/** Domain input with its server check, shortly after typing (also used by "New app"). */
+export function useDomainCheck() {
   const [domain, setDomain] = useState("");
   const [www, setWww] = useState(false);
   const [check, setCheck] = useState<{ key: string; res: DomainCheck } | null>(null);
   const [checkErr, setCheckErr] = useState<{ key: string; msg: string } | null>(null);
   const [checking, setChecking] = useState(false);
   const seq = useRef(0);
-  // 2 Target
-  const [target, setTarget] = useState<string | null>(null);
-  const [port, setPort] = useState("");
-  const [scheme, setScheme] = useState<"http" | "https">("http");
-  // 3 SSL
-  const [ssl, setSsl] = useState<SslFlags | null>(null);
-  // 4 Access
-  const [mode, setMode] = useState<"open" | "list">("open");
-  const [rows, setRows] = useState<Row[]>([]);
-  const nextKey = useRef(1);
-  // 5 Job
-  const [job, setJob] = useState<HostJob | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [startErr, setStartErr] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const d = await api.get<WizardData>("/api/hosts/new");
-      setData(d);
-      setLoadError(null);
-      setSsl((s) => s ?? d.defaults.values);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  /* ---- check the domain, shortly after typing ---- */
   const key = `${domain.trim().toLowerCase()}|${www ? 1 : 0}`;
   const runCheck = useCallback(async (d: string, w: boolean) => {
     const k = `${d.trim().toLowerCase()}|${w ? 1 : 0}`;
@@ -175,6 +139,48 @@ export function NewSiteWizard({ onClose }: { onClose: () => void }) {
 
   const cur = check?.key === key ? check.res : null;
   const curErr = checkErr?.key === key ? checkErr.msg : null;
+  return { domain, setDomain, www, setWww, checking, cur, curErr, runCheck };
+}
+
+/* ========================================================================= */
+
+export function NewSiteWizard({ onClose }: { onClose: () => void }) {
+  const [data, setData] = useState<WizardData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const [reached, setReached] = useState(0);
+
+  // 1 Domain
+  const { domain, setDomain, www, setWww, checking, cur, curErr, runCheck } = useDomainCheck();
+  // 2 Target
+  const [target, setTarget] = useState<string | null>(null);
+  const [port, setPort] = useState("");
+  const [scheme, setScheme] = useState<"http" | "https">("http");
+  // 3 SSL
+  const [ssl, setSsl] = useState<SslFlags | null>(null);
+  // 4 Access
+  const [mode, setMode] = useState<"open" | "list">("open");
+  const [rows, setRows] = useState<Row[]>([]);
+  const nextKey = useRef(1);
+  // 5 Job
+  const [job, setJob] = useState<HostJob | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startErr, setStartErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api.get<WizardData>("/api/hosts/new");
+      setData(d);
+      setLoadError(null);
+      setSsl((s) => s ?? d.defaults.values);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   const names = cur?.domains ?? [];
   const target_ = data?.targets.containers.find((c) => c.name === target) ?? null;
   const portNum = Number(port);
@@ -357,7 +363,7 @@ function Progress({ step, reached, valid, locked, onGo }: { step: number; reache
   );
 }
 
-function NpmMissing({ npm }: { npm: WizardData["npm"] }) {
+export function NpmMissing({ npm }: { npm: WizardData["npm"] }) {
   const { go } = useNav();
   const close = useCloseOverlay();
   return (
@@ -388,7 +394,7 @@ function NpmMissing({ npm }: { npm: WizardData["npm"] }) {
 
 /* ---------- 1 Domain --------------------------------------------------------------------------- */
 
-function DomainStep({
+export function DomainStep({
   domain,
   setDomain,
   www,
@@ -701,7 +707,7 @@ function SslStep({ data, ssl, setSsl, names }: { data: WizardData; ssl: SslFlags
 
 /* ---------- 4 Access ----------------------------------------------------------------------------- */
 
-function AccessStep({
+export function AccessStep({
   data,
   mode,
   setMode,
@@ -980,6 +986,11 @@ function ReviewStep({
     );
   }
 
+  return <JobRun job={job} stack={target?.project} />;
+}
+
+/** Live progress of a job and how it ended (also used by "New app"). */
+export function JobRun({ job, stack }: { job: HostJob; stack?: string | null }) {
   return (
     <div className="flex flex-col gap-4">
       <ol className="ns-run">
@@ -1027,7 +1038,7 @@ function ReviewStep({
           }
         >
           It now shows under Services, next to its container
-          {target?.project ? <> (stack <b>{target.project}</b>)</> : null}.{" "}
+          {stack ? <> (stack <b>{stack}</b>)</> : null}.{" "}
           <a className="ns-link d-mono" href={job.url} target="_blank" rel="noreferrer">
             {job.url}
           </a>

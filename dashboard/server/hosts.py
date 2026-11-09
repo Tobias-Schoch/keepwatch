@@ -567,12 +567,35 @@ def _access_block(access: dict) -> tuple[str, list[tuple[str, str]]]:
     return "\n".join(block), clean
 
 
-def _validate(body: dict) -> dict:
+def validate_site(body: dict) -> dict:
+    """Everything about a site that does not depend on its container (apps.py checks this before the container exists)."""
     domain = clean_domain(body.get("domain", ""))
     names = domain_list(domain, bool(body.get("www")))
     hits = taken(names)
     if hits:
         raise _err(409, f"{hits[0]['domain']} already exists in the Proxy Manager ({hits[0]['kind']} #{hits[0]['id']}).")
+    ssl_in = body.get("ssl") or {}
+    base = defaults()["values"]
+    ssl = {k: bool(ssl_in.get(k, base[k])) for k in FLAGS}
+    if not ssl["certificate"]:
+        ssl.update(sslForced=False, hsts=False, hstsSubdomains=False, http2=False)
+    if not ssl["sslForced"]:
+        ssl.update(hsts=False, hstsSubdomains=False)
+    if not ssl["hsts"]:
+        ssl["hstsSubdomains"] = False
+    advanced, entries = _access_block(body.get("access") or {})
+    if ssl["certificate"]:
+        ips = server_ips()
+        bad = [d for d in (dns_check(n, ips) for n in names) if not d["ok"]]
+        if bad:
+            raise _err(400, f"{bad[0]['name']}: {bad[0]['problem']} Without matching DNS the certificate fails.")
+    if not npm_creds():
+        raise _err(409, "No Proxy Manager credentials are stored yet (Settings -> Proxy Manager access).")
+    return {"domain": domain, "domains": names, "ssl": ssl, "advanced": advanced, "entries": entries}
+
+
+def _validate(body: dict) -> dict:
+    site = validate_site(body)
     host = str(body.get("forwardHost", "")).strip()
     if not D.CONTAINER_NAME.match(host):
         raise _err(400, "Please choose a container as the target.")
@@ -592,40 +615,29 @@ def _validate(body: dict) -> dict:
     scheme = body.get("forwardScheme", "http")
     if scheme not in ("http", "https"):
         raise _err(400, "The scheme must be http or https.")
-    ssl_in = body.get("ssl") or {}
-    base = defaults()["values"]
-    ssl = {k: bool(ssl_in.get(k, base[k])) for k in FLAGS}
-    if not ssl["certificate"]:
-        ssl.update(sslForced=False, hsts=False, hstsSubdomains=False, http2=False)
-    if not ssl["sslForced"]:
-        ssl.update(hsts=False, hstsSubdomains=False)
-    if not ssl["hsts"]:
-        ssl["hstsSubdomains"] = False
-    advanced, entries = _access_block(body.get("access") or {})
-    if ssl["certificate"]:
-        ips = server_ips()
-        bad = [d for d in (dns_check(n, ips) for n in names) if not d["ok"]]
-        if bad:
-            raise _err(400, f"{bad[0]['name']}: {bad[0]['problem']} Without matching DNS the certificate fails.")
-    if not npm_creds():
-        raise _err(409, "No Proxy Manager credentials are stored yet (Settings -> Proxy Manager access).")
-    return {"domain": domain, "domains": names, "host": host, "port": port, "scheme": scheme, "ssl": ssl,
-            "advanced": advanced, "entries": entries}
+    return {**site, "host": host, "port": port, "scheme": scheme}
+
+
+def new_job(domain: str, domains: list[str], steps: list[tuple[str, str]]) -> dict:
+    """Registers a job; one at a time, so two jobs never reload the Proxy Manager against each other."""
+    with JOB_LOCK:
+        if any(j["state"] == "running" for j in JOBS.values()):
+            raise _err(409, "A site is already being created.")
+        jid = uuid.uuid4().hex[:12]
+        job = {"id": jid, "state": "running", "domain": domain, "domains": domains,
+               "url": None, "hostId": None, "error": None, "rollback": [], "startedAt": time.time(), "finishedAt": None,
+               "steps": [{"key": k, "label": label, "state": "pending", "detail": None} for k, label in steps]}
+        JOBS[jid] = job
+        for old in [k for k, j in JOBS.items() if j["state"] != "running" and time.time() - (j["finishedAt"] or 0) > 3600]:
+            JOBS.pop(old, None)
+    return job
 
 
 def create_host(body: dict):
     spec = _validate(body)
     _token()  # check access first so the error comes right away
-    with JOB_LOCK:
-        if any(j["state"] == "running" for j in JOBS.values()):
-            raise _err(409, "A site is already being created.")
-        jid = uuid.uuid4().hex[:12]
-        job = {"id": jid, "state": "running", "domain": spec["domain"], "domains": spec["domains"],
-               "url": None, "hostId": None, "error": None, "rollback": [], "startedAt": time.time(), "finishedAt": None,
-               "steps": [{"key": k, "label": label, "state": "pending", "detail": None} for k, label in STEPS]}
-        JOBS[jid] = job
-        for old in [k for k, j in JOBS.items() if j["state"] != "running" and time.time() - (j["finishedAt"] or 0) > 3600]:
-            JOBS.pop(old, None)
+    job = new_job(spec["domain"], spec["domains"], STEPS)
+    jid = job["id"]
     threading.Thread(target=_run_job, args=(job, spec), daemon=True, name=f"new-site-{jid}").start()
     return {"ok": True, "job": jid}
 
@@ -671,7 +683,21 @@ def _probe(domain: str, https: bool) -> dict | None:
         return None
 
 
-def _run_job(job: dict, spec: dict):
+def fail_job(job: dict, e: Exception):
+    """Marks the running step as failed and the rest as cancelled. The caller rolls back and finishes the job."""
+    msg = getattr(e, "message", None) or str(e)
+    if not getattr(e, "message", None):
+        traceback.print_exc()
+    cur = next((s for s in job["steps"] if s["state"] == "running"), None)
+    if cur:
+        _step(job, cur["key"], "failed", msg)
+    for s in job["steps"]:
+        if s["state"] == "pending":
+            s["state"] = "cancelled"
+    job["error"] = msg
+
+
+def _run_job(job: dict, spec: dict, on_fail=None):
     host_id = cert_id = None
     ssl = spec["ssl"]
     try:
@@ -723,17 +749,10 @@ def _run_job(job: dict, spec: dict):
             _step(job, "cert", "skipped", "no certificate requested")
             _step(job, "https", "skipped", "HTTP only")
     except Exception as e:  # noqa: BLE001
-        msg = getattr(e, "message", None) or str(e)
-        if not getattr(e, "message", None):
-            traceback.print_exc()
-        cur = next((s for s in job["steps"] if s["state"] == "running"), None)
-        if cur:
-            _step(job, cur["key"], "failed", msg)
-        for s in job["steps"]:
-            if s["state"] == "pending":
-                s["state"] = "cancelled"
-        job["error"] = msg
+        fail_job(job, e)
         _rollback(job, host_id, cert_id)
+        if on_fail:  # before the state changes: the UI stops polling once the job has finished
+            on_fail()
         job["state"] = "failed"
         job["finishedAt"] = time.time()
         _refresh_sites(hosts_changed=bool(host_id))

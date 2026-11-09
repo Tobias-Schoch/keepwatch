@@ -39,6 +39,7 @@ sys.modules.setdefault("dashboard", sys.modules[__name__])
 import config  # noqa: E402  keepwatch.conf, feature flags, paths
 import updates  # noqa: E402  updates & rollback, cleanup
 import hosts  # noqa: E402  "New site" wizard (proxy host via the Proxy Manager API)
+import apps  # noqa: E402  "New app": Git repository to live site (Portainer stack + proxy host)
 import uptime  # noqa: E402  availability per site (every minute, uptime.db)
 import sitegrade  # noqa: E402  security grade per site (A-F, every 6 h)
 import timeline  # noqa: E402  timeline "What happened?" (timeline.db, 120 days)
@@ -3071,6 +3072,8 @@ class Handler(BaseHTTPRequestHandler):
             return lynis.route(method, path, self._body() if method == "POST" else {})
         if path.startswith("/api/sitegrade"):  # security grade per site (sitegrade.py)
             return sitegrade.route(method, path, self._body() if method == "POST" else {})
+        if path.startswith("/api/apps"):  # new app (apps.py)
+            return apps.route(method, path, query, self._body() if method == "POST" else {})
         if path.startswith(("/api/hosts", "/api/settings/npm")):  # new site (hosts.py)
             return hosts.route(method, path, query, self._body() if method in ("POST", "PUT") else {})
         if path.startswith("/api/uptime"):  # availability (uptime.py)

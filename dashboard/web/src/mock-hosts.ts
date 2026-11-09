@@ -14,7 +14,7 @@
  * ?mock&npm=off starts without a Proxy Manager login. Without the proxy module: {"enabled": false}.
  */
 import { has } from "./config";
-import type { DnsResult, DomainCheck, HostDefaults, HostJob, IpList, NewHostBody, NpmStatus, Target, WizardData } from "./hosts";
+import type { AppWizardData, DnsResult, DomainCheck, HostDefaults, HostJob, IpList, NewAppBody, NewHostBody, NpmStatus, Target, WizardData } from "./hosts";
 import type { AccessEntry, AccessHost, Container, Site } from "./types";
 import { addressCount, normalize } from "./ip";
 
@@ -264,11 +264,33 @@ function advance(m: MockJob, ctx: MockHostsCtx): HostJob {
   return j;
 }
 
+/* ---------- "New app" ---------------------------------------------------------------------------- */
+
+const appJobs = new Map<string, { job: HostJob; start: number; fail: boolean; port: number }>();
+
+function advanceApp(a: { job: HostJob; start: number; fail: boolean; port: number }): HostJob {
+  const { job } = a;
+  if (job.state !== "running") return job;
+  const at = Math.floor((Date.now() - a.start) / 1400);
+  if (a.fail && at >= 1) {
+    job.steps[0] = { ...job.steps[0], state: "failed", detail: "Portainer answered 500: authentication required" };
+    job.steps.slice(1).forEach((s) => (s.state = "cancelled"));
+    Object.assign(job, { state: "failed", error: "Portainer answered 500: authentication required", finishedAt: now() });
+    return job;
+  }
+  job.steps.forEach((s, i) => {
+    s.state = i < at ? "ok" : i === at ? "running" : "pending";
+    if (i < at && s.key === "container") s.detail = `${job.stack}:${a.port}`;
+  });
+  if (at >= job.steps.length) Object.assign(job, { state: "done", url: `https://${job.domain}/`, finishedAt: now() });
+  return job;
+}
+
 /* ---------- Router ------------------------------------------------------------------------------ */
 
 export async function mockHosts(method: string, url: URL, body: unknown, ctx: MockHostsCtx): Promise<unknown> {
   const p = url.pathname;
-  if (!p.startsWith("/api/hosts") && !p.startsWith("/api/settings/npm")) return NOT_MINE;
+  if (!p.startsWith("/api/hosts") && !p.startsWith("/api/settings/npm") && !p.startsWith("/api/apps")) return NOT_MINE;
   if (!has("proxy")) return { enabled: false };
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -297,7 +319,7 @@ export async function mockHosts(method: string, url: URL, body: unknown, ctx: Mo
     return { ok: true, message: "Connected as admin@example.com · Proxy Manager 2.16.0." };
   }
 
-  if (method === "GET" && p === "/api/hosts/new") {
+  if (method === "GET" && (p === "/api/hosts/new" || p === "/api/apps/new")) {
     const npmC = ctx.containers.find((c) => c.image.startsWith("jc21/nginx-proxy-manager"));
     const nets = (npmC?.networks ?? []).filter((n) => n !== "bridge");
     return {
@@ -307,7 +329,8 @@ export async function mockHosts(method: string, url: URL, body: unknown, ctx: Mo
       targets: { npm: { name: npmC?.name ?? null, networks: nets, join: nets.includes("proxy-net") ? "proxy-net" : nets[0] ?? null }, containers: targets(ctx) },
       ipLists: ipLists(ctx),
       myIps: ctx.myIps,
-    } satisfies WizardData;
+      ...(p === "/api/apps/new" ? { portainer: { connected: true, reason: null } } : {}),
+    } satisfies WizardData | AppWizardData;
   }
 
   if (method === "GET" && p === "/api/hosts/check") {
@@ -317,6 +340,30 @@ export async function mockHosts(method: string, url: URL, body: unknown, ctx: Mo
     const t = taken(ctx, names);
     const d = names.map(dns);
     return { domain, domains: names, taken: t, dns: d, serverIps: SERVER, ok: !t.length && d.every((x) => x.ok) } satisfies DomainCheck;
+  }
+
+  const am = p.match(/^\/api\/apps\/jobs\/([0-9a-f]{12})$/);
+  if (method === "GET" && am) {
+    const a = appJobs.get(am[1]);
+    if (!a) throw new Error("This job doesn't exist (anymore).");
+    return structuredClone(advanceApp(a));
+  }
+
+  if (method === "POST" && p === "/api/apps") {
+    const b = body as NewAppBody;
+    await wait(400);
+    const domain = cleanDomain(b.domain);
+    const names = domainList(domain, b.www);
+    const t = taken(ctx, names);
+    if (t.length) throw new Error(`${t[0].domain} already exists in the Proxy Manager (${t[0].kind} #${t[0].id}).`);
+    const id = Math.random().toString(16).slice(2, 14).padEnd(12, "0");
+    const stack = b.stackName || b.repoUrl.split("/").pop()!.replace(/\.git$/, "").toLowerCase();
+    const job: HostJob = {
+      id, state: "running", domain, domains: names, url: null, hostId: null, error: null, rollback: [], startedAt: now(), finishedAt: null, stack,
+      steps: [["stack", "Deploy from Git"], ["container", "Wait for the container"], ["host", "Create host"], ["cert", "Fetch certificate"], ["https", "Force HTTPS"], ["test", "Test request"]].map(([key, label]) => ({ key, label, state: "pending" as const, detail: null })),
+    };
+    appJobs.set(id, { job, start: Date.now(), fail: b.repoUrl.includes("fail"), port: b.port ?? 3005 });
+    return { ok: true, job: id };
   }
 
   const jm = p.match(/^\/api\/hosts\/jobs\/([0-9a-f]{12})$/);

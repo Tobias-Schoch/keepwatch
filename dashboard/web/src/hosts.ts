@@ -119,5 +119,25 @@ export interface HostJob {
   rollback: { label: string; ok: boolean }[];
   startedAt: number;
   finishedAt: number | null;
-  steps: { key: "host" | "cert" | "https" | "test"; label: string; state: JobStepState; detail: string | null }[];
+  /** Only for "New app" jobs: the Portainer stack. */
+  stack?: string;
+  steps: { key: string; label: string; state: JobStepState; detail: string | null }[];
+}
+
+export interface AppWizardData extends WizardData {
+  portainer: { connected: boolean; reason: string | null };
+}
+
+export interface NewAppBody {
+  repoUrl: string;
+  branch: string;
+  composeFile: string;
+  stackName: string;
+  gitUsername: string;
+  gitToken: string;
+  container: string;
+  port: number | null;
+  domain: string;
+  www: boolean;
+  access: { mode: "open" | "list"; entries: { value: string; note: string }[] };
 }

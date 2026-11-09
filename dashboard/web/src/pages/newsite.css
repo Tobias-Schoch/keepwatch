@@ -110,3 +110,8 @@ html[data-design^="obsidian"] .ns-link { color: var(--o-accent); font-size: 12.5
   html[data-design^="obsidian"] .ns-summary > div { grid-template-columns: minmax(0, 1fr) auto; }
   html[data-design^="obsidian"] .ns-summary dd { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* "New app": everything the backend works out itself */
+html[data-design^="obsidian"] .ns-advanced > summary { cursor: pointer; font-size: 13px; color: var(--o-dim); user-select: none; }
+html[data-design^="obsidian"] .ns-advanced > summary:hover { color: var(--o-text); }
+html[data-design^="obsidian"] .ns-advanced[open] > summary { margin-bottom: 14px; }

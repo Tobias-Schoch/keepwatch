@@ -466,6 +466,22 @@ from `KW_PORTAINER_WEBHOOKS="<webhook-id>@<domain> ..."` (proxy module), the wiz
   → `{ ok, message }`. An empty password with the same email keeps the stored one.
 - `POST /api/settings/npm/test` → `{ ok, message }` (fresh login, rights, version). `DELETE /api/settings/npm` → `{ ok }`.
 
+### New app  (`server/apps.py`, needs modules proxy + docker + portainer; UI: Services → "New app")
+
+From a Git repository to a live site in one job: Portainer deploys the compose file as a new stack, then
+the job waits for the container and runs the steps of "New site". Needs a passkey like `POST /api/hosts`.
+
+- `GET /api/apps/new` → like `GET /api/hosts/new`, plus `portainer: { connected: boolean; reason: string | null }`.
+- `POST /api/apps` with `{ repoUrl, branch?, composeFile?, stackName?, gitUsername?, gitToken?, container?, port?, domain, www, access }`
+  → `{ ok, job }`. `repoUrl` must be `https://` without a login in it. Defaults: branch `main`, `docker-compose.yml`,
+  stack name from the repository. Always HTTPS; HSTS and cache follow the majority of the other sites, HSTS for
+  subdomains stays off. A stack or compose project of that name → 409, the checks of `POST /api/hosts` apply.
+  `gitToken` goes to Portainer only and never appears in the job or its errors.
+- `GET /api/apps/jobs/<id>` → job as under "New site", plus `stack`. Step keys: `stack`, `container`, `host`, `cert`, `https`, `test`.
+  The container is the one in the stack that shares a network with the Proxy Manager (with several: `container`, else the
+  stack's own name or a typical front-end name), the port what it listens on (else EXPOSE; `port` overrides).
+  **If a step up to HTTPS fails, the stack is deleted as well.** Volumes and built images stay.
+
 ### Availability  (`server/uptime.py`, needs module `proxy`)
 
 A thread fetches every enabled site once a minute (curl via 127.0.0.1 with the real name, like the check

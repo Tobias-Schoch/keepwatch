@@ -145,6 +145,7 @@ DANGER: list[tuple[str, str, str, object, str | None]] = [
     ("PUT", r"/api/access/\d+", "Change IP allowlist", None, "proxy"),
     ("PUT", r"/api/access/\d+/paths", "Change path allowlist", None, "proxy"),  # allowlist for single paths
     ("POST", r"/api/hosts", "Create proxy host", None, "proxy"),
+    ("POST", r"/api/apps", "Deploy an app from Git", None, "portainer"),  # runs a repository's compose file on the server
     # Services
     ("POST", r"/api/stacks/\d+/redeploy", "Redeploy stack", None, "portainer"),
     ("PUT", r"/api/stacks/\d+/env", "Change environment variables", None, "portainer"),
