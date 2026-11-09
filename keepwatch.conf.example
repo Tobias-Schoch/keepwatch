@@ -67,6 +67,20 @@ KW_BACKUP_REMOTE=""             # off-site restic repository, e.g. s3:https://s3
                                 # Empty = local only. Credentials are asked for on the server during deploy.
 KW_BACKUP_REMOTE_KEEP="14 13 24"
 
+# --- upload-drop ----------------------------------------------------------------------
+# Folders one SSH key may rsync into and nothing else (no shell, no tunnels, no other folder),
+# e.g. files a container serves, updated without a git push and a redeploy. "name=/srv/folder ...",
+# folders under /srv only. Each drop gets the user upload-<name>; its public key goes in
+# KW_UPLOAD_KEY_<name> (one key: the whole line of the .pub file; dashes in the name become _):
+#   KW_UPLOAD_DROPS="site-assets=/srv/site/assets"
+#   KW_UPLOAD_KEY_site_assets="ssh-ed25519 AAAAC3Nz... me@laptop"
+# Upload: rsync -a --delete -e "ssh -i <key> -o IdentitiesOnly=yes" ./assets/ upload-site-assets@<host>:
+# (the target path is relative to the drop folder). Drops are in the backup (/srv) - add a
+# folder to KW_BACKUP_EXCLUDE to leave it out.
+KW_UPLOAD_DROPS=""
+KW_UPLOAD_FROM=""               # where drop keys may log in from: "" = only the tailnet if the tailscale
+                                # module is on, else anywhere; "any"; or addresses/networks "198.51.100.7,10.0.0.0/8"
+
 # --- image-scan / lynis --------------------------------------------------------------
 KW_IMAGE_SCAN_TIME="Sun 01:30"  # Trivy scan of all container images
 KW_LYNIS_TIME="Sun 00:30"       # Lynis hardening audit

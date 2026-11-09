@@ -72,9 +72,40 @@ are handled), and the next deploy installs or cleanly uninstalls it. Data is nev
 | `proxy` | Nginx Proxy Manager on 80/443 with Let's Encrypt | ● | | | |
 | `portainer` | Web UI for Docker stacks, deploy from Git | asked | asked | | |
 | `dashboard` | The Keepwatch dashboard | asked | asked | asked | |
+| `upload-drop` | Folders one SSH key may rsync into, and nothing else | | | | |
 
 Presets: **Web** = websites and apps behind a reverse proxy · **Docker** = containers without public
 websites · **Server** = hardened server without Docker · **Minimal** = the bare minimum.
+
+### Upload drops
+
+For files a container serves that change more often than its code (images, 3D models, downloads):
+rsync them straight from your computer, without a git push and a redeploy.
+
+```sh
+# keepwatch.conf
+KW_UPLOAD_DROPS="site-assets=/srv/site/assets"
+KW_UPLOAD_KEY_site_assets="ssh-ed25519 AAAAC3Nz... me@laptop"   # a key of its own, used for nothing else
+```
+
+`./keepwatch enable upload-drop && ./keepwatch deploy` creates the user `upload-site-assets` (no password,
+no sudo, no other group) and the folder (written by that user only, readable by everyone, so a container
+can mount it read-only). The key can only run [`rrsync`](https://manpages.ubuntu.com/manpages/noble/man1/rrsync.1.html)
+for that folder, upload-only, with symlinks defused: no shell, no forwarding, no other folder. That is set
+in the key's options and again by sshd (`Match User ... ForceCommand`). With the `tailscale` module the key
+only works from the tailnet (`KW_UPLOAD_FROM`). Nothing in SSH, the firewall or fail2ban is loosened: a
+wrong key counts as a failed login like any other, so upload with `-o IdentitiesOnly=yes`.
+
+```sh
+rsync -a --delete -e "ssh -i ~/.ssh/site_upload -o IdentitiesOnly=yes -o BatchMode=yes" \
+  ./assets/ upload-site-assets@your-server:      # the path after ":" is relative to the drop folder
+```
+
+On macOS use GNU rsync (`brew install rsync`): the built-in one (openrsync) sends options rrsync refuses.
+
+Drops live under `/srv`, so they are in the backup. To leave one out, add its folder to
+`KW_BACKUP_EXCLUDE`. Taking a drop out of `KW_UPLOAD_DROPS` (or disabling the module) removes its user and
+key; the folder and its files stay, owned by root.
 
 ### Switching modules in the dashboard
 
